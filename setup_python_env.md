@@ -104,6 +104,9 @@ git push
 ```sh
 rm -f .git/index.lock
 ```
+create cleanup.sh
+chmod +x cleanup.sh
+./cleanup.sh #run from project root
 
 ## Summary
 
