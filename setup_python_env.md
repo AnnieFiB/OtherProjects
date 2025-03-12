@@ -86,7 +86,7 @@ deactivate
     "python.languageServer": "Pylance",
     "python.analysis.typeCheckingMode": "basic",  // Set to "basic" or "strict" as needed.
     "python.analysis.autoImportCompletions": true,
-    "python.analysis.extraPaths": ["./src"]  // Adjust this based on your project structure.
+    "python.analysis.extraPaths": ["./my_projects"]  // Adjust this based on your project structure.
 }
 ```
 
