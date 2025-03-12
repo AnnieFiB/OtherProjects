@@ -1,0 +1,44 @@
+API-Related Projects
+
+Set Up Your Virtual Environment
+
+cd path\to\your\project
+python -m venv venv
+venv\Scripts\activate
+pip install requests python-dotenv
+
+
+Set Up the API Key as an Environment Variable
+
+API Integration (temporal)
+While your virtual environment is active, run:
+OPENWEATHER_API_KEY=your_api_key_here
+echo %OPENWEATHER_API_KEY%s
+
+Permanent:
+Create a .env file in your project directory and add:
+echo .>.env
+OPENWEATHER_API_KEY=your_api_key_here
+
+Load the .env file in your script:
+from dotenv import load_dotenv
+load_dotenv()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+=============================
+to Remove All Installed Packages (Reset Environment): pip freeze | xargs pip uninstall -y
