@@ -3,7 +3,7 @@ import pandas as pd
 import json
 
 # Your Google API Key
-API_KEY = "AIzaSyCsyemeVbOgkwdydIJQEi5j7xft8ksYIVU"
+API_KEY = GOOGLE_API_KEY
 
 # Search query for beauty stores in Mexico City
 SEARCH_QUERY = "beauty store in Mexico City"
