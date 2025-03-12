@@ -2,7 +2,7 @@ import requests
 import pandas as pd
 import time
 
-API_KEY = "AIzaSyCsyemeVbOgkwdydIJQEi5j7xft8ksYIVU"  # Use your key
+API_KEY = GOOGLE_API_KEY  # Use your key
 
 def get_beauty_stores(location="Mexico City"):
     # Step 1: Get coordinates using Geocoding API
