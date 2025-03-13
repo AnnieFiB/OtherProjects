@@ -1,12 +1,12 @@
-import library_modules as lm  # Import all modules
+import project1_library_modules as lm  # Import all modules
 
 # ---------------- MAIN MENU ----------------
 def main_menu():
     while True:
         print("\nLibrary Management System")
-        print("1. Inventory Management")
-        print("2. Order Processing")
-        print("3. Reporting")
+        print("1. Inventory Management: add, update, display or search for books")
+        print("2. Order Processing: checkout or return books")
+        print("3. Reporting: View all transanction summary")
         print("4. Exit")
 
         choice = input("Enter your choice: ")
