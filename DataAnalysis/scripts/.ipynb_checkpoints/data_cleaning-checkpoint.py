@@ -1,88 +1,84 @@
-def data_cleaning(df, irrelevant_columns=[], binary_cols=[], multi_level_cols=[], 
-                 num_cols=[], date_cols=[], column_inconsistencies={}, 
-                 missing_value_strategy="drop", fill_value=None):
-    """
-    Perform comprehensive data cleaning with step-by-step progress messages.
-    Returns cleaned DataFrame and prints status updates.
-    """
-    # Track initial state
-    original_shape = df.shape
-    
-    # 1. Handle missing values
-    if missing_value_strategy == "drop":
-        initial_null_count = df.isnull().sum().sum()
-        df = df.dropna()
-        print(f"✅ Missing values handled: Dropped {initial_null_count - df.isnull().sum().sum()} null entries")
-    elif missing_value_strategy == "fill":
-        fill_count = df.isnull().sum().sum()
-        df = df.fillna(fill_value)
-        print(f"✅ Missing values handled: Filled {fill_count} null entries")
-    
-    # 2. Remove irrelevant columns
-    cols_before = set(df.columns)
-    df = df.drop(columns=irrelevant_columns, errors='ignore')
-    removed_cols = list(cols_before - set(df.columns))
-    print(f"✅ Columns removed: {removed_cols if removed_cols else 'None'}")
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from scipy import stats
 
-    # 3. Handle date columns
-    if date_cols:
-        for col in date_cols:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
-        print(f"✅ Date columns processed: {date_cols}")
+def detect_columns(df):
+    """Detect column types with clear categories"""
+    config = {
+        'num_cols': [],
+        'binary_cols': [],
+        'multi_cat_cols': [],
+        'date_cols': [],
+        'irrelevant_cols': []
+    }
+
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            config['date_cols'].append(col)
+        elif pd.api.types.is_numeric_dtype(df[col]):
+            config['num_cols'].append(col)
+        else:
+            unique_vals = df[col].nunique()
+            if unique_vals == 1:
+                config['irrelevant_cols'].append(col)
+            elif unique_vals == 2:
+                config['binary_cols'].append(col)
+            elif 3 <= unique_vals <= 15:
+                config['multi_cat_cols'].append(col)
+            else:
+                config['irrelevant_cols'].append(col)
+
+    print("🔍 Detected columns:")
+    print(f"- Dates: {config['date_cols']}")
+    print(f"- Numerical: {config['num_cols']}")
+    print(f"- Binary: {config['binary_cols']}")
+    print(f"- Multi-category: {config['multi_cat_cols']}")
+    print(f"- Irrelevant: {config['irrelevant_cols']}")
+    
+    return config
+
+def clean_data(df, config, missing_strategy='fill'):
+    """
+    Clean data with flexible missing value handling
+    Parameters:
+        missing_strategy: 'fill' (default) or 'drop'
+    """
+    print(f"\n🚀 Starting cleaning (missing strategy: {missing_strategy})...")
+    
+    # 1. Remove irrelevant columns
+    df = df.drop(columns=config['irrelevant_cols'])
+    print(f"✅ Removed {len(config['irrelevant_cols'])} irrelevant columns")
+    
+    # 2. Process dates
+    if config['date_cols']:
+        for col in config['date_cols']:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+        print(f"📅 Processed {len(config['date_cols'])} date columns")
+    
+    # 3. Handle missing values
+    original_rows = len(df)
+    missing_before = df.isna().sum().sum()
+    
+    if missing_strategy == 'fill':
+        df = df.fillna({
+            col: df[col].median() if col in config['num_cols'] else df[col].mode()[0]
+            for col in df.columns
+        })
+        print(f"✅ Filled {missing_before} missing values")
+    elif missing_strategy == 'drop':
+        df = df.dropna().reset_index(drop=True)
+        removed = original_rows - len(df)
+        print(f"✅ Dropped {removed} rows with missing values")
     else:
-        print("✅ No date columns to process")
-
+        raise ValueError("Invalid missing_strategy. Use 'fill' or 'drop'")
+    
     # 4. Remove duplicates
     dup_count = df.duplicated().sum()
-    df = df.drop_duplicates()
-    print(f"✅ Duplicates removed: {dup_count} rows")
+    df = df.drop_duplicates().reset_index(drop=True)
+    print(f"✅ Removed {dup_count} duplicate rows")
+    
 
-    # 5. Fix inconsistencies
-    if column_inconsistencies:
-        for col, valid_values in column_inconsistencies.items():
-            invalid_count = (~df[col].isin(valid_values)).sum()
-            df[col] = df[col].apply(lambda x: x if x in valid_values else None)
-            print(f"✅ {col} standardized: {invalid_count} invalid values cleaned")
-    else:
-        print("✅ No inconsistencies to resolve")
 
-    # 6. Encode categorical variables
-    if binary_cols:
-        label_enc = LabelEncoder()
-        for col in binary_cols:
-            df[col] = label_enc.fit_transform(df[col])
-        print(f"✅ Binary encoded: {binary_cols}")
-    else:
-        print("✅ No binary columns to encode")
-        
-    if multi_level_cols:
-        df = pd.get_dummies(df, columns=multi_level_cols, drop_first=True)
-        print(f"✅ Multi-level encoded: {multi_level_cols}")
-    else:
-        print("✅ No multi-level columns to encode")
-
-    # 7. Scale numerical features
-    if num_cols:
-        scaler = StandardScaler()
-        df[num_cols] = scaler.fit_transform(df[num_cols])
-        print(f"✅ Numerical scaled: {len(num_cols)} columns")
-    else:
-        print("✅ No numerical columns to scale")
-
-    # 8. Handle outliers
-    if num_cols:
-        original_rows = df.shape[0]
-        for col in num_cols:
-            df = df[(np.abs(stats.zscore(df[col])) < 3)]
-        removed_outliers = original_rows - df.shape[0]
-        print(f"✅ Outliers handled: {removed_outliers} rows removed")
-    else:
-        print("✅ No numerical columns for outlier handling")
-
-    # Final report
-    print("\n🔷 Cleaning Summary:")
-    print(f"Original shape: {original_shape}")
-    print(f"New shape: {df.shape}")
-    print(f"Total change: {original_shape[0] - df.shape[0]} rows, {original_shape[1] - df.shape[1]} cols removed")
     
     return df
