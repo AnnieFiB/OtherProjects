@@ -1,3 +1,2 @@
-myenv/     # Linux
-myenv_win/ # Windows
 .env
+myenv/
