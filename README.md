@@ -119,23 +119,9 @@ jupyter lab DataAnalysis/notebooks/exploratory/data_profiling.ipynb
 # 2. Process data
 python DataEngineering/pipelines/data_cleaning.py
 
-# 3. Run KLP project
+# 3. Run KiP project
 cd KIP && make run
 ```
-
-## Folder Recommendations ✅
-
-Create notebook subfolders:
-
-```bash
-mkdir -p DataAnalysis/notebooks/{exploratory,reports,experimental,archive}
-```
-
-- Add **READMEs** in each main folder explaining contents.
-- Use **consistent naming**:
-
-  - `YYYY-MM-DD_ProjectName_Purpose.ipynb`
-  - `data_cleaning_pipeline.py`
 
 ## Maintenance
 
