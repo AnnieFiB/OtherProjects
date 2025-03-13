@@ -67,14 +67,6 @@ sqldf("SELECT * FROM df WHERE age > 30")
 | **Machine Learning Lifecycle**  | Model training, evaluation, and deployment |
 | **CI/CD Deployment**            | Automated integration and deployment |
 
-- **Airflow**: DAGs for workflow orchestration
-- **Spark**: Distributed processing jobs
-- **Data Quality**: Great Expectations validations
-End-to-end implementation of:
-- **** (AWS)
-- **e**
-- **CI/CD deployment**
-
 ### 3. KIP Project
 #### Key Features:
 
