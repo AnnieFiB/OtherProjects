@@ -118,11 +118,17 @@ chmod +x cleanup.sh
 ## Binder
 - **touch postBuild** 
 - **I#!/bin/bash
-
 # Set API keys as environment variables
 echo "export API_KEY_1=your_first_api_key" >> ~/.bashrc
 echo "export API_KEY_2=your_second_api_key" >> ~/.bashrc
 echo "export API_KEY_3=your_third_api_key" >> ~/.bashrc
+
+# Ensure .bashrc is loaded for all login shells (including Jupyter)
+echo "source ~/.bashrc" >> ~/.profile
+echo "source ~/.bashrc" >> ~/.bash_profile
+
+# Reload .bashrc to make sure it's available immediately
+source ~/.bashrc
 
 - **dos2unix postBuild** 
 - **chmod +x postBuild** 
