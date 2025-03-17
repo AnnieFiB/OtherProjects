@@ -1,34 +1,41 @@
-Inventory Management Module (python library_inventory.py)
-✅ Book Registration:
-    - Allows librarians to add new books.
-    - If a book already exists, it updates the number of copies instead.
-✅ Inventory Display:
-    - Lists all books using loops and formatted output.
-    - Displays Book ID, Title, Author, Genre, and Copies Available.
-✅ Search Functionality:
-    - Implements search by title, author, or genre using dictionaries and conditionals.
-    - Displays matching results in a formatted table.
+Inventory Management Module (project1_library_modules.py)
+	Book Registration:
+    		- Allows librarians to add new books.
+   		 - If a book already exists, it updates the number of copies instead.
+	Inventory Display:
+    		- Lists all books using loops and formatted output.
+    		- Displays Book ID, Title, Author, Genre, and Copies Available.
+	Search Functionality:
+    		- Implements search by title, author, or genre using dictionaries and conditionals.
+    		- Displays matching results in a formatted table.
 
-Order Processing Module (python library_order_processing.py)
-✅ Checkout Process:
-    - Verifies if the book is available (if/else).
-    - Updates the book count when checked out.
-✅ Return Process:
-    - Increases available copies when a book is returned.
-    - Validates return dates.
-✅ Overdue Calculation:
-    - Uses floats to compute fines ($2 per overdue day).
-    - Uses conditionals to check due dates.
+Order Processing Module (project1_library_modules.py)
+ 	Checkout Process:
+    		- Verifies if the book is available (if/else).
+   		- Updates the book count when checked out.
+	Return Process:
+    		- Increases available copies when a book is returned.
+    		- Validates return dates.
+	Overdue Calculation:
+    		- Uses floats to compute fines ($2 per overdue day).
+    		- Uses conditionals to check due dates.
 
-Reporting Module (python library_reporting.py)
-✅ Real-Time Inventory Report:
-    - Uses loops to display current stock availability.
-✅ Popular Book Alerts:
-    - Filters books with a high checkout count (>3 times) to identify popular titles.
-✅ Transaction Summaries:
-    - Provides an end-of-day summary with total checkouts and outstanding fines.
+Reporting Module (project1_library_modules.py)
+	Real-Time Inventory Report:
+   		 - Uses loops to display current stock availability.
+	Popular Book Alerts:
+    		- Filters books with a high checkout count (>3 times) to identify popular titles.
+	Transaction Summaries:
+    		- Provides an end-of-day summary with total checkouts and outstanding fines.
 
 
-library_modules.py → Contains all three modules (Inventory Management Module,Order Processing Module
+project1_library_modules.py : Contains all three modules (Inventory Management Module, Order Processing Module
  Reporting Module).
-library_management.py → Calls and integrates the modules, allowing users to navigate through via a menu..
+
+project1_library_management.py:  Calls and integrates the modules, allowing users to navigate through via a menu..
+
+allow user name when adding/updating books
+allow for number of copies to be borrowed / returned
+for all modules, allow to continue (eg keep adding book etc unless otherwise(enter done) to go back to main menu
+add stock alert
+add rent fee
