@@ -1,266 +1,236 @@
+# project1_library_modules2.py
 import datetime
+import sys
 
-# Book Inventory Dictionary
-books = {}  # Format: {book_id: {'title': ..., 'author': ..., 'genre': ..., 'copies': ..., 'checkout_count': 0}}
+# ---------------------- DATA STORES ----------------------
+books = {}
+borrowed_books = {}
+transaction_log = []
+STOCK_ALERT = 2
+POPULAR_THRESHOLD = 3
 
-# Borrowed Books Dictionary (Stores user transactions)
-borrowed_books = {}  # Format: {user_name: {'book_id': ..., 'due_date': ..., 'return_date': None, 'fine': 0}}
+# ---------------------- HELPER FUNCTIONS ----------------------
+def get_input(prompt):
+    """Universal input handler with exit capability"""
+    response = input(prompt).strip()
+    if response.lower() == 'exit':
+        print("\n🚪 Exiting program...")
+        sys.exit(0)
+    return response
 
-# Transaction Log (Records all transactions: added, checked out, returned)
-transaction_log = []  # Format: [{'type': 'added/checkout/returned', 'user': ..., 'book_id': ..., 'date': ..., 'fine': ...}]
+def validate_name(prompt):
+    """Validate user name input"""
+    while True:
+        name = get_input(prompt)
+        if not name: return None
+        if name.isalpha(): return name
+        print("❌ Invalid name. Use letters only.")
 
+def validate_number(prompt, num_type):
+    """Validate numeric inputs"""
+    while True:
+        value = get_input(prompt)
+        if not value: return None
+        try:
+            return num_type(value)
+        except ValueError:
+            print(f"Invalid {num_type.__name__} value")
 
-# ---------------- INVENTORY MANAGEMENT MODULE ----------------
+# ---------------------- INVENTORY MANAGEMENT ----------------------
 def add_or_update_book():
     while True:
-        book_id = input("Enter Book ID (or type 'exit' to cancel): ").strip()
-        if book_id.lower() == "exit":
-            print("Returning to the previous menu...")
-            return
+        print("\n📘 Book Management (type 'exit' to quit)")
+        user = validate_name("Your name (Enter to cancel): ")
+        if not user: return
+
+        book_id = get_input("Book ID (Enter to cancel): ")
+        if not book_id: return
+
+        if book_id in books:
+            print(f"Updating {books[book_id]['title']}")
+            print("1.Stock 2.Title 3.Author 4.Genre 5.Rent 6.Cancel")
+            choice = get_input("Choose: ")
+            
+            if choice == '1':
+                copies = validate_number("Copies to add: ", int)
+                if copies:
+                    books[book_id]['copies'] += copies
+                    note = "Low stock!" if books[book_id]['copies'] <= STOCK_ALERT else ""
+                    log_transaction('updated', user, book_id, copies, note)
+        else:
+            title = get_input("Title: ")
+            author = get_input("Author: ")
+            genre = get_input("Genre: ")
+            rent = validate_number("Rent fee: $", float)
+            copies = validate_number("Copies: ", int)
+            
+            if all([title, author, genre, rent, copies]):
+                books[book_id] = {
+                    'title': title, 'author': author, 'genre': genre,
+                    'copies': copies, 'checkouts': 0, 'rent': rent
+                }
+                log_transaction('added', user, book_id, copies)
         
-        title = input("Enter Book Title (or type 'exit' to cancel): ").strip()
-        if title.lower() == "exit":
-            print("Returning to the previous menu...")
-            return
-
-        author = input("Enter Author Name (or type 'exit' to cancel): ").strip()
-        if author.lower() == "exit":
-            print("Returning to the previous menu...")
-            return
-
-        genre = input("Enter Genre (or type 'exit' to cancel): ").strip()
-        if genre.lower() == "exit":
-            print("Returning to the previous menu...")
-            return
-
-        copies_input = input("Enter Number of Copies (or type 'exit' to cancel): ").strip()
-        if copies_input.lower() == "exit":
-            print("Returning to the previous menu...")
-            return
-
-        try:
-            copies = int(copies_input)
-            break
-        except ValueError:
-            print("Invalid number. Please enter an integer value.")
-
-    if book_id in books:
-        books[book_id]['copies'] += copies  # Update copies if book exists
-        print(f"Updated book '{title}'. Total copies: {books[book_id]['copies']}")
-    else:
-        books[book_id] = {'title': title, 'author': author, 'genre': genre, 'copies': copies, 'checkout_count': 0}
-        print(f"Book '{title}' added successfully!")
-
-    # Log transaction
-    transaction_log.append({'type': 'added', 'user': 'Library Admin', 'book_id': book_id, 'date': datetime.date.today(), 'fine': 0})
+        get_input("\nPress Enter to continue...")
 
 def display_books():
     if not books:
-        print("No books available in inventory.")
+        print("\nNo books in inventory")
+        get_input("\nPress Enter to return...")
         return
-
-    print("\nAvailable Books:")
-    print(f"{'ID':<10}{'Title':<30}{'Author':<25}{'Genre':<20}{'Copies':<10}{'Checkouts':<10}")
-    print("-" * 105)
-
-    for book_id, details in books.items():
-        print(f"{book_id:<10}{details['title']:<30}{details['author']:<25}{details['genre']:<20}{details['copies']:<10}{details['checkout_count']:<10}")
-
-    # Option to exit to menu
-    input("\nPress Enter to return to the previous menu...")
+    
+    print("\n📚 Current Inventory")
+    print(f"{'ID':<10}{'Title':<25}{'Author':<20}{'Stock':<10}{'Checkouts':<10}Rent")
+    print("-"*85)
+    for bid, b in books.items():
+        stock = f"{b['copies']}{'⚠️' if b['copies'] <= STOCK_ALERT else ''}"
+        print(f"{bid:<10}{b['title'][:24]:<25}{b['author'][:19]:<20}"
+              f"{stock:<10}{b['checkouts']:<10}${b['rent']:.2f}")
+    get_input("\nPress Enter to return...")
 
 def search_books():
     while True:
-        search_term = input("\nEnter title, author, or genre to search (or type 'exit' to cancel): ").strip()
-        if search_term.lower() == "exit":
-            print("Returning to the previous menu...")
-            return
+        term = get_input("\n🔍 Search (title/author/genre) or Enter to cancel: ").lower()
+        if not term: return
+        
+        results = []
+        for bid, b in books.items():
+            if (term in b['title'].lower() or
+                term in b['author'].lower() or
+                term in b['genre'].lower()):
+                results.append((bid, b))
+        
+        if not results:
+            print("No matches found")
+            continue
+            
+        print(f"\nFound {len(results)} results:")
+        print(f"{'ID':<10}{'Title':<25}{'Author':<20}{'Stock':<10}")
+        print("-"*65)
+        for bid, b in results:
+            print(f"{bid:<10}{b['title'][:24]:<25}{b['author'][:19]:<20}{b['copies']:<10}")
+        get_input("\nPress Enter to search again...")
 
-        found_books = [details for book_id, details in books.items() if 
-                       search_term.lower() in details['title'].lower() or 
-                       search_term.lower() in details['author'].lower() or 
-                       search_term.lower() in details['genre'].lower()]
-
-        if found_books:
-            print("\nSearch Results:")
-            print(f"{'ID':<10}{'Title':<30}{'Author':<25}{'Genre':<20}{'Copies':<10}{'Checkouts':<10}")
-            print("-" * 105)
-
-            for book_id, book in books.items():
-                if (search_term.lower() in book['title'].lower() or 
-                    search_term.lower() in book['author'].lower() or 
-                    search_term.lower() in book['genre'].lower()):
-                    print(f"{book_id:<10}{book['title']:<30}{book['author']:<25}{book['genre']:<20}{book['copies']:<10}{book['checkout_count']:<10}")
-
-            input("\nPress Enter to search again or type 'exit' to return: ")
-        else:
-            print("No books found matching the search criteria.")
-
-
-# ---------------- ORDER PROCESSING MODULE ----------------
+# ---------------------- ORDER PROCESSING ----------------------
 def checkout_book():
     while True:
-        book_id = input("Enter Book ID to checkout (or type 'exit' to cancel): ").strip()
-        if book_id.lower() == "exit":
-            print("Returning to the previous menu...")
-            return
+        print("\n📖 Checkout (type 'exit' to quit)")
+        user = validate_name("Your name: ")
+        if not user: return
 
-        if book_id in books and books[book_id]["copies"] > 0:
-            user = input("Enter your name (or type 'exit' to cancel): ").strip()
-            if user.lower() == "exit":
-                print("Returning to the previous menu...")
-                return
-
-            books[book_id]["copies"] -= 1  # Reduce available copies
-            books[book_id]["checkout_count"] += 1  # Track popular books
-            due_date = datetime.date.today() + datetime.timedelta(days=14)  # Due in 14 days
-            borrowed_books[user] = {"book_id": book_id, "due_date": due_date, "return_date": None, "fine": 0}
-            print(f"Book checked out successfully! Due Date: {due_date}")
-
-            # Log transaction
-            transaction_log.append({'type': 'checkout', 'user': user, 'book_id': book_id, 'date': datetime.date.today(), 'fine': 0})
-            break
-        else:
-            print("Book not available or invalid book ID.")
+        book_id = get_input("Book ID: ")
+        if book_id not in books:
+            print("Book not found")
+            continue
+            
+        available = books[book_id]['copies']
+        if available < 1:
+            print("Out of stock")
+            continue
+            
+        copies = validate_number(f"Copies (max {available}): ", int)
+        if not copies or copies < 1 or copies > available:
+            print("Invalid quantity")
+            continue
+            
+        books[book_id]['copies'] -= copies
+        books[book_id]['checkouts'] += copies
+        due_date = datetime.date.today() + datetime.timedelta(days=14)
+        
+        if user not in borrowed_books:
+            borrowed_books[user] = []
+        borrowed_books[user].append({
+            'book_id': book_id,
+            'due_date': due_date,
+            'copies': copies,
+            'rent': books[book_id]['rent'] * copies
+        })
+        
+        log_transaction('checkout', user, book_id, copies, f"Due: {due_date}")
+        print(f"Checked out {copies} copies. Due: {due_date}")
+        get_input("\nPress Enter to continue...")
 
 def return_book():
     while True:
-        user = input("Enter your name (or type 'exit' to cancel): ").strip()
-        if user.lower() == "exit":
-            print("Returning to the previous menu...")
+        print("\n🔄 Return (type 'exit' to quit)")
+        user = validate_name("Your name: ")
+        if not user or user not in borrowed_books:
+            print("No borrowed books")
             return
-
-        if user in borrowed_books:
-            book_id = borrowed_books[user]["book_id"]
-            due_date = borrowed_books[user]["due_date"]
-
-            # Prompt the user to choose return date method
-            print("\nChoose return date option:")
-            print("1. Use today's date")
-            print("2. Enter a custom return date")
             
-            date_choice = input("Enter your choice (1 or 2): ").strip()
+        print("\nYour Borrowed Books:")
+        for idx, item in enumerate(borrowed_books[user]):
+            book = books[item['book_id']]
+            print(f"{idx+1}. {book['title']} ({item['copies']} copies)")
+            
+        choice = validate_number("Select book (number): ", int)
+        if not choice or choice < 1 or choice > len(borrowed_books[user]):
+            print("Invalid selection")
+            continue
+            
+        item = borrowed_books[user][choice-1]
+        qty = validate_number(f"Return quantity (max {item['copies']}): ", int)
+        if not qty or qty < 1 or qty > item['copies']:
+            print("Invalid quantity")
+            continue
+            
+        # Calculate fine
+        return_date = datetime.date.today()
+        overdue_days = (return_date - item['due_date']).days
+        fine = max(0, overdue_days) * 2.0 * qty
+        
+        # Update records
+        books[item['book_id']]['copies'] += qty
+        item['copies'] -= qty
+        note = f"Fine: ${fine:.2f}" if fine else ""
+        
+        if item['copies'] == 0:
+            borrowed_books[user].pop(choice-1)
+            if not borrowed_books[user]:
+                del borrowed_books[user]
+        
+        log_transaction('returned', user, item['book_id'], qty, note)
+        print(f"Returned {qty} copies. {note}")
+        get_input("\nPress Enter to continue...")
 
-            if date_choice == "1":
-                return_date = datetime.date.today()
-            elif date_choice == "2":
-                while True:
-                    return_date_str = input("Enter return date (YYYY-MM-DD) or type 'exit' to cancel: ").strip()
-                    if return_date_str.lower() == "exit":
-                        print("Returning to the previous menu...")
-                        return
-                    try:
-                        return_date = datetime.datetime.strptime(return_date_str, "%Y-%m-%d").date()
-                        break  # Exit loop on valid input
-                    except ValueError:
-                        print("Invalid date format. Please enter the date in YYYY-MM-DD format.")
-            else:
-                print("Invalid choice. Returning to the menu...")
-                return
-
-            books[book_id]["copies"] += 1
-            borrowed_books[user]["return_date"] = return_date
-
-            if return_date > due_date:
-                overdue_days = (return_date - due_date).days
-                fine = float(overdue_days * 2.0)
-                borrowed_books[user]["fine"] = fine
-                print(f"Book returned late! You have a fine of ${fine:.2f}.")
-            else:
-                print("Book returned successfully on time!")
-
-            # Log transaction (but do NOT delete borrowed book record)
-            transaction_log.append({'type': 'returned', 'user': user, 'book_id': book_id, 'date': return_date, 'fine': borrowed_books[user]['fine']})
-
-            print(f"Book '{books[book_id]['title']}' returned on {return_date}.")
-            print(f"Available copies: {books[book_id]['copies']}")
-            break
-        else:
-            print("No record of borrowed books for this user.")
-
-# ---------------- REPORTING MODULE ----------------
+# ---------------------- REPORTING ----------------------
 def inventory_report():
-    if not books:
-        print("No books available in inventory.")
-        return
-    
-    print("\n Real-Time Inventory Report ")
-    print(f"{'ID':<10}{'Title':<30}{'Author':<25}{'Genre':<20}{'Copies':<10}{'Checkouts':<10}{'Returned':<10}")
-    print("-" * 115)
-
-    total_books = 0
-    total_checkouts = 0
-    total_returns = 0
-    genre_count = {}
-
-    for book_id, details in books.items():
-        # Count returned books from transaction log
-        returned_count = sum(1 for t in transaction_log if t['book_id'] == book_id and t['type'] == 'returned')
-        total_returns += returned_count
-
-        print(f"{book_id:<10}{details['title']:<30}{details['author']:<25}{details['genre']:<20}{details['copies']:<10}{details['checkout_count']:<10}{returned_count:<10}")
-
-        total_books += details['copies']
-        total_checkouts += details['checkout_count']
-
-        # Track genre-wise book count
-        genre_count[details['genre']] = genre_count.get(details['genre'], 0) + details['copies']
-
-    print("\n Summary ")
-    print(f"Total Books in Inventory: {total_books}")
-    print(f"Total Checkouts: {total_checkouts}")
-    print(f"Total Returned Books: {total_returns}")
-
-    print("\n Books by Genre ")
-    for genre, count in genre_count.items():
-        print(f"{genre:<20}{count} books")
-
-    # Option to exit to menu
-    input("\nPress Enter to return to the previous menu...")
-
+    print("\n📊 Live Inventory Report")
+    print(f"{'ID':<10}{'Title':<25}{'Stock':<10}{'Checkouts':<10}Status")
+    print("-"*65)
+    for bid, b in books.items():
+        status = "Low Stock" if b['copies'] <= STOCK_ALERT else "Available"
+        print(f"{bid:<10}{b['title'][:24]:<25}{b['copies']:<10}{b['checkouts']:<10}{status}")
+    get_input("\nPress Enter to continue...")
 
 def popular_books():
-    threshold = 3  # Define popularity threshold (e.g., books checked out more than 3 times)
-
-    # Filter books with checkout counts above the threshold
-    popular = [book for book in books.values() if book.get('checkout_count', 0) > threshold]
-
+    popular = [(b['title'], b['checkouts']) for b in books.values() if b['checkouts'] >= POPULAR_THRESHOLD]
     if not popular:
-        print("\n No popular books at the moment! Try checking back later.")
+        print("\nNo popular books currently")
         return
-
-    print("\n Popular Books Alert!")
-    print(f"{'Title':<30}{'Author':<25}{'Genre':<20}{'Checkouts':<10}")
-    print("-" * 85)
-
-    for book_id, details in books.items():
-        if details.get('checkout_count', 0) > threshold:
-            print(f"{details['title']:<30}{details['author']:<25}{details['genre']:<20}{details['checkout_count']:<10}")
-
-    # Option to exit to menu
-    input("\nPress Enter to return to the previous menu...")
-
+    
+    print("\n🔥 Popular Books:")
+    for title, count in sorted(popular, key=lambda x: x[1], reverse=True):
+        print(f"{title:<30} ({count} checkouts)")
+    get_input("\nPress Enter to continue...")
 
 def transaction_summary():
-    if not transaction_log:
-        print("No transactions recorded yet.")
-        return
+    print("\n📜 Complete Transaction History")
+    print(f"{'Date':<20}{'Type':<10}{'User':<15}{'Book':<25}{'Qty':<5}Details")
+    print("-"*85)
+    for t in transaction_log:
+        book_title = books.get(t['book_id'], {}).get('title', 'Unknown')[:24]
+        print(f"{t['date'].strftime('%Y-%m-%d %H:%M'):<20}"
+              f"{t['type']:<10}{t['user']:<15}{book_title:<25}"
+              f"{t['copies']:<5}{t.get('notes','')}")
+    get_input("\nPress Enter to continue...")
 
-    print("\n Complete Transaction Summary ")
-    print(f"{'Type':<12}{'User':<20}{'Book ID':<10}{'Date':<15}{'Fine':<10}")
-    print("-" * 75)
-
-    for transaction in transaction_log:
-        # Ensure the date is properly formatted
-        if isinstance(transaction['date'], datetime.date):
-            transaction_date = transaction['date'].strftime("%Y-%m-%d")
-        else:
-            transaction_date = "Invalid Date"
-
-        # Format fine properly as currency
-        fine_amount = f"${transaction['fine']:.2f}" if transaction['fine'] > 0 else "No Fine"
-
-        print(f"{transaction['type']:<12}{transaction['user']:<20}{transaction['book_id']:<10}{transaction_date:<15}{fine_amount:<10}")
-
-    # Option to exit to menu
-    input("\nPress Enter to return to the previous menu...")
+def log_transaction(t_type, user, book_id, copies, notes=""):
+    transaction_log.append({
+        'type': t_type,
+        'user': user,
+        'book_id': book_id,
+        'date': datetime.datetime.now(),
+        'copies': copies,
+        'notes': notes
+    })
