@@ -114,3 +114,15 @@ chmod +x cleanup.sh
 - **Store dependencies** in `requirements.txt`
 - **Set the Python interpreter** in `.vscode/settings.json`
 - **Document setup steps** in `README.md`
+
+## Binder
+- **touch postBuild** 
+- **I#!/bin/bash
+
+# Set API keys as environment variables
+echo "export API_KEY_1=your_first_api_key" >> ~/.bashrc
+echo "export API_KEY_2=your_second_api_key" >> ~/.bashrc
+echo "export API_KEY_3=your_third_api_key" >> ~/.bashrc
+
+- **dos2unix postBuild** 
+- **chmod +x postBuild** 
