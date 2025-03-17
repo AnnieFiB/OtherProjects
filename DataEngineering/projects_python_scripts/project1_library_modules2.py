@@ -253,7 +253,7 @@ def return_book():
             print(f"❌ Error: {str(e)}")
             
         get_input("\nPress Enter to continue...")
-        
+
 # ---------------------- REPORTS ----------------------
 def inventory_report():
     print("\n📊 Live Inventory Report")
@@ -278,12 +278,19 @@ def popular_books():
 
 
 def transaction_summary():
+    total_fines = 0.0
     print("\n📜 Complete Transaction History")
-    print(f"{'Date':<20}{'Type':<12}{'User':<15}{'Book ID':<10}{'Title':<25}{'Qty':<5}Details")
+    print(f"{'Date':<20}{'Type':<12}{'User':<15}{'Book ID':<10}{'Title':<25}{'Qty':<5}{'Fine':<10}")
     print("-"*95)
+    
     for t in transaction_log:
+        # Calculate total fines
+        if 'fine' in t and isinstance(t['fine'], (int, float)):
+            total_fines += t['fine']
+        
+        # Get book details
         book_title = books.get(t['book_id'], {}).get('title', 'Unknown')[:24]
-        details = f"{t.get('notes','')}"
+        fine_amount = f"${t.get('fine',0):.2f}" if t.get('fine',0) > 0 else "None"
         
         print(f"{t['date'].strftime('%Y-%m-%d %H:%M'):<20}"
               f"{t['type']:<12}"
@@ -291,7 +298,9 @@ def transaction_summary():
               f"{t['book_id']:<10}"
               f"{book_title:<25}"
               f"{t['copies']:<5}"
-              f"{details}")
+              f"{fine_amount:<10}")
+
+    print("\n💰 Total Fines Collected:", f"${total_fines:.2f}")
     get_input("\nPress Enter to continue...")
 
 
