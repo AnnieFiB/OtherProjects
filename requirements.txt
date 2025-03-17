@@ -51,7 +51,6 @@ httpcore
 httpx
 idna
 ImageHash
-importlib
 importlib_resources
 interface-meta
 ipykernel
