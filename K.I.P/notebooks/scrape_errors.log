@@ -1,0 +1,30 @@
+2025-03-20 22:31:27,656 - WARNING - Skipping row 0 due to missing or empty URL.
+2025-03-20 22:32:49,346 - WARNING - Skipping row 0 due to missing or empty URL.
+2025-03-20 22:32:53,207 - WARNING - Skipping row 3 due to missing or empty URL.
+2025-03-20 22:32:54,904 - WARNING - Skipping row 6 due to missing or empty URL.
+2025-03-20 22:32:56,610 - ERROR - Request failed for https://www.pestañasyuñas.com/: 403 Client Error: Forbidden for url: https://www.xn--pestaasyuas-5dbe.com/
+2025-03-20 22:32:56,613 - WARNING - Skipping row 9 due to missing or empty URL.
+2025-03-20 22:32:56,613 - WARNING - Skipping row 10 due to missing or empty URL.
+2025-03-20 22:32:56,613 - WARNING - Skipping row 11 due to missing or empty URL.
+2025-03-20 22:32:57,891 - WARNING - Skipping row 14 due to missing or empty URL.
+2025-03-20 22:32:57,892 - WARNING - Skipping row 15 due to missing or empty URL.
+2025-03-20 22:33:02,024 - WARNING - Skipping row 18 due to missing or empty URL.
+2025-03-20 22:33:02,024 - WARNING - Skipping row 19 due to missing or empty URL.
+2025-03-20 22:33:02,945 - ERROR - Request failed for https://www.selina.com/mexico-city-downtown/: 404 Client Error: Not Found for url: https://www.selina.com/mexico-city-downtown/
+2025-03-20 22:33:13,237 - ERROR - Request failed for http://www.twitter.com/sextopiso_mx: 400 Client Error: Bad Request for url: https://x.com/sextopiso_mx
+2025-03-20 22:33:13,239 - WARNING - Skipping row 23 due to missing or empty URL.
+2025-03-20 22:33:13,761 - ERROR - Request failed for https://www.barcelo.com/es-mx/barcelo-mexico-reforma/bienestar/?utm_source=google&utm_medium=organic&utm_campaign=my_business&utm_content=7345spa: 403 Client Error: Forbidden for url: https://www.barcelo.com/es-mx/barcelo-mexico-reforma/bienestar/?utm_source=google&utm_medium=organic&utm_campaign=my_business&utm_content=7345spa
+2025-03-20 22:33:15,712 - WARNING - Skipping row 27 due to missing or empty URL.
+2025-03-20 22:33:16,324 - WARNING - Skipping row 29 due to missing or empty URL.
+2025-03-20 22:33:16,926 - WARNING - Skipping row 31 due to missing or empty URL.
+2025-03-20 22:33:19,076 - WARNING - Skipping row 34 due to missing or empty URL.
+2025-03-20 22:33:19,076 - WARNING - Skipping row 35 due to missing or empty URL.
+2025-03-20 22:33:20,092 - ERROR - Request failed for http://wwwbell8spa.com/: HTTPConnectionPool(host='wwwbell8spa.com', port=80): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPConnection object at 0x000002BEA188DB50>: Failed to resolve 'wwwbell8spa.com' ([Errno 11001] getaddrinfo failed)"))
+2025-03-20 22:33:20,093 - WARNING - Skipping row 38 due to missing or empty URL.
+2025-03-20 22:33:23,689 - WARNING - Skipping row 42 due to missing or empty URL.
+2025-03-20 22:33:24,283 - ERROR - Request failed for https://www.farmaciasanpablo.com.mx/: 403 Client Error: Forbidden for url: https://www.farmaciasanpablo.com.mx/
+2025-03-20 22:33:25,959 - ERROR - Request failed for http://www.lapildora.com/index.html: 406 Client Error: Not Acceptable for url: http://www.lapildora.com/index.html
+2025-03-20 22:33:28,279 - ERROR - Request failed for https://www.liverpool.com.mx/: 403 Client Error: Forbidden for url: https://www.liverpool.com.mx/
+2025-03-20 22:33:29,992 - ERROR - Request failed for http://www.walmart.com.mx/: 418 Client Error: I'm a teapot for url: http://www.walmart.com.mx/
+2025-03-20 22:33:32,753 - ERROR - Request failed for https://www.suburbia.com.mx/: 403 Client Error: Forbidden for url: https://www.suburbia.com.mx/
+2025-03-20 22:33:36,419 - ERROR - Request failed for https://www.coppel.com/ubicacion-de-tiendas-coppel/ciudad-de-mexico/cuauhtemoc/coppel-sonora: 403 Client Error: Forbidden for url: https://www.coppel.com/ubicacion-de-tiendas-coppel/ciudad-de-mexico/cuauhtemoc/coppel-sonora
