@@ -28,3 +28,29 @@
 2025-03-20 22:33:29,992 - ERROR - Request failed for http://www.walmart.com.mx/: 418 Client Error: I'm a teapot for url: http://www.walmart.com.mx/
 2025-03-20 22:33:32,753 - ERROR - Request failed for https://www.suburbia.com.mx/: 403 Client Error: Forbidden for url: https://www.suburbia.com.mx/
 2025-03-20 22:33:36,419 - ERROR - Request failed for https://www.coppel.com/ubicacion-de-tiendas-coppel/ciudad-de-mexico/cuauhtemoc/coppel-sonora: 403 Client Error: Forbidden for url: https://www.coppel.com/ubicacion-de-tiendas-coppel/ciudad-de-mexico/cuauhtemoc/coppel-sonora
+2025-03-21 21:42:13,470 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-21 21:42:13,508 - WARNING - No such comm: 05c9ae0b-e283-4d27-913a-e3ac6d01d541
+2025-03-21 22:22:27,527 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-21 22:22:27,556 - WARNING - No such comm: 1342d5fb-732e-4957-832d-6e025f48cd05
+2025-03-21 22:24:04,138 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-21 22:24:04,142 - WARNING - No such comm: 81c0f4d4-d48d-4c03-b08a-93c2d56f8b9e
+2025-03-21 22:26:11,361 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-21 22:26:11,621 - WARNING - No such comm: c44fcb7d-9075-4d37-8941-a203495c8bed
+2025-03-21 22:35:12,679 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-21 22:35:12,685 - WARNING - No such comm: 9b1839d8-e6fd-494c-9590-638145bc79bf
+2025-03-22 00:25:35,824 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-22 00:25:35,846 - WARNING - No such comm: cda4c0de-1853-4ade-8ae0-9a0ffd460b25
+2025-03-22 00:45:21,232 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-22 00:45:21,235 - WARNING - No such comm: 7938430e-eca3-49a2-a6b8-7e88a7ee2e77
+2025-03-22 01:41:53,340 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-22 01:41:53,344 - WARNING - No such comm: 42045773-3521-4114-a75c-7b03f095c968
+2025-03-22 12:20:34,540 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-22 12:20:34,546 - WARNING - No such comm: a2672362-d991-423c-a0e6-60ca370c2a0b
+2025-03-22 12:35:54,409 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-22 12:35:54,447 - WARNING - No such comm: 3ab9b269-85eb-4603-ba4d-178b0361fbec
+2025-03-22 12:36:50,034 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-22 12:36:50,041 - WARNING - No such comm: 429d8648-b32d-4411-8e4e-6c464b57b65f
+2025-03-22 12:51:13,420 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-22 12:51:13,425 - WARNING - No such comm: 3a44d710-5b82-408e-966f-cea2e3033190
+2025-03-22 13:18:44,881 - ERROR - No such comm target registered: jupyter.widget.control
+2025-03-22 13:18:44,885 - WARNING - No such comm: 211367da-31f9-4153-8a2e-8e674c84e4ab
