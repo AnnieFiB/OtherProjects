@@ -7,10 +7,10 @@ from datetime import datetime, timedelta
 from collections import Counter
 
 # Add the path to weather.py to the system path
-script_path = Path(__file__).resolve().parent / "DataAnalysis" / "scripts"
-sys.path.append(str(script_path))
+weather_script_path = Path(__file__).resolve().parent.parent / "DataAnalysis" / "Scripts"
+sys.path.append(str(weather_script_path))
 
-import weather  # Import the weather module from its subdirectory
+import weather  # Import the weatherk module from the updated path
 
 # App Title and Description
 st.title("Weather Explorer")
