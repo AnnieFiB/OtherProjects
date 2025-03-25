@@ -179,3 +179,5 @@ wrapt
 wsproto
 yarl
 yfinance
+streamlit
+
