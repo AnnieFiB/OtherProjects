@@ -11,7 +11,7 @@ from collections import Counter
 
 # Step 1: Load API key from .env file
 load_dotenv()
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
+API_KEY = ("dd8cedb72349b0f32a7715bb048eea3b")
 if not API_KEY:
     raise ValueError("Please set the OPENWEATHER_API_KEY in the .env file.")
 
