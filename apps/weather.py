@@ -41,23 +41,13 @@ def get_aqi_text(aqi):
     }.get(aqi, "Unknown")
 
 def get_city_coordinates(location_input):
-    # Parse location input (supports "City", "City, Country", "City, State, Country")
-    parts = [part.strip() for part in location_input.split(',')]
-    params = {"appid": API_KEY, "limit": 1}
-    
-    if len(parts) == 1:
-        params["q"] = parts[0]
-    elif len(parts) == 2:
-        params["q"] = f"{parts[0]},{parts[1]}"
-    elif len(parts) >= 3:
-        params["q"] = f"{parts[0]},{parts[1]},{parts[2]}"
-    
+    params = {"q": location_input, "limit": 1, "appid": API_KEY}
     response = requests.get(GEO_URL, params=params)
     if response.status_code != 200 or not response.json():
         raise ValueError(f"Location '{location_input}' not found")
-    
     data = response.json()[0]
     return data["lat"], data["lon"]
+
 
 def fetch_weather_data(lat, lon):
     params = {"lat": lat, "lon": lon, "appid": API_KEY, "units": "metric"}

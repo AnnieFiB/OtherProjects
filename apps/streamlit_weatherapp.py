@@ -47,7 +47,7 @@ def update_search_history(query):
     st.session_state.search_history = history[:5]
 
 def display_city_forecast():
-    query_params = st.experimental_get_query_params()
+    query_params = st.query_params()
     default_city = query_params.get("search", [""])[0]
     
     city = st.text_input(
