@@ -7,12 +7,28 @@ from collections import Counter
 import matplotlib.pyplot as plt
 
 def load_env():
-    # Get the root directory (parent of current file's parent)
-    root_dir = Path(__file__).resolve().parent.parent
+    # Get the correct root path for your project
+    current_script_path = Path(__file__).resolve()
+    
+    # Navigate up 1 level if in "apps" folder
+    if current_script_path.parent.name == "apps":
+        root_dir = current_script_path.parent.parent
+    else:
+        root_dir = current_script_path.parent
+    
     env_path = root_dir / ".env"
     
     if not env_path.exists():
-        raise FileNotFoundError(f".env file not found at {env_path}")
+        # Try alternative paths for debugging
+        alt_paths = [
+            root_dir / ".env",
+            current_script_path.parent / ".env",
+            Path.cwd() / ".env"
+        ]
+        error_msg = "\n".join([f"- {p}" for p in alt_paths])
+        raise FileNotFoundError(
+            f".env file not found. Check these locations:\n{error_msg}"
+        )
     
     load_dotenv(env_path)
     api_key = os.getenv("OPENWEATHER_API_KEY")
@@ -39,12 +55,24 @@ def get_aqi_text(aqi):
         4: "Poor", 5: "Very Poor"
     }.get(aqi, "Unknown")
 
-def get_city_coordinates(city_name):
-    params = {"q": city_name, "limit": 1, "appid": API_KEY}
+def get_city_coordinates(location_input):
+    # Parse location input (supports "City", "City, Country", "City, State, Country")
+    parts = [part.strip() for part in location_input.split(',')]
+    params = {"appid": API_KEY, "limit": 1}
+    
+    if len(parts) == 1:
+        params["q"] = parts[0]
+    elif len(parts) == 2:
+        params["q"] = f"{parts[0]},{parts[1]}"
+    elif len(parts) >= 3:
+        params["q"] = f"{parts[0]},{parts[1]},{parts[2]}"
+    
     response = requests.get(GEO_URL, params=params)
     if response.status_code != 200 or not response.json():
-        raise ValueError(f"City '{city_name}' not found")
-    return response.json()[0]["lat"], response.json()[0]["lon"]
+        raise ValueError(f"Location '{location_input}' not found")
+    
+    data = response.json()[0]
+    return data["lat"], data["lon"]
 
 def fetch_weather_data(lat, lon):
     params = {"lat": lat, "lon": lon, "appid": API_KEY, "units": "metric"}
