@@ -6,29 +6,25 @@ from datetime import datetime, timedelta
 from collections import Counter
 import matplotlib.pyplot as plt
 
-def load_env():
-    """Search for .env in parent directories up to 3 levels"""
-    current_path = Path(__file__).resolve()
-    
-    # Search up to 3 parent directories
-    for depth in range(4):
-        target_path = current_path.parents[depth] / ".env"
-        if target_path.exists():
-            load_dotenv(target_path)
-            if api_key := os.getenv("OPENWEATHER_API_KEY"):
-                return api_key
-            raise ValueError("OPENWEATHER_API_KEY missing in .env")
-    
-    # Show all searched paths if not found
-    searched_paths = "\n".join([str(current_path.parents[d] / ".env") for d in range(4)])
-    raise FileNotFoundError(
-        f".env not found. Either:\n"
-        f"1. Create .env at project root with OPENWEATHER_API_KEY\n"
-        f"2. Paths searched:\n{searched_paths}"
+# Step 1: Load API key from .env file
+# Load from .env first
+load_dotenv()
+API_KEY = os.getenv("OPENWEATHER_API_KEY")
+
+# Fallback to Streamlit Secrets if available
+if not API_KEY:
+    try:
+        import streamlit as st
+        API_KEY = st.secrets.get("OPENWEATHER_API_KEY")
+    except:
+        pass  # Not running in Streamlit environment
+
+if not API_KEY:
+    raise ValueError(
+        "Please set OPENWEATHER_API_KEY in either:\n"
+        "1. .env file (local development)\n"
+        "2. Streamlit Secrets (deployed apps)"
     )
-
-API_KEY = load_env()
-
 
 # API URLs
 GEO_URL = "http://api.openweathermap.org/geo/1.0/direct"
