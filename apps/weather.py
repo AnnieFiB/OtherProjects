@@ -7,23 +7,25 @@ from collections import Counter
 import matplotlib.pyplot as plt
 
 def load_env():
-    # Get the project root (2 levels up from this file's location)
-    project_root = Path(__file__).resolve().parent.parent
-    env_path = project_root / ".env"
+    """Search for .env in parent directories up to 3 levels"""
+    current_path = Path(__file__).resolve()
     
-    if not env_path.exists():
-        raise FileNotFoundError(
-            f".env file not found at: {env_path}\n"
-            "Keep your .env file in the project root (same level as apps folder)"
-        )
+    # Search up to 3 parent directories
+    for depth in range(4):
+        target_path = current_path.parents[depth] / ".env"
+        if target_path.exists():
+            load_dotenv(target_path)
+            if api_key := os.getenv("OPENWEATHER_API_KEY"):
+                return api_key
+            raise ValueError("OPENWEATHER_API_KEY missing in .env")
     
-    load_dotenv(env_path)
-    api_key = os.getenv("OPENWEATHER_API_KEY")
-    
-    if not api_key:
-        raise ValueError("OPENWEATHER_API_KEY missing in .env")
-    
-    return api_key
+    # Show all searched paths if not found
+    searched_paths = "\n".join([str(current_path.parents[d] / ".env") for d in range(4)])
+    raise FileNotFoundError(
+        f".env not found. Either:\n"
+        f"1. Create .env at project root with OPENWEATHER_API_KEY\n"
+        f"2. Paths searched:\n{searched_paths}"
+    )
 
 API_KEY = load_env()
 
