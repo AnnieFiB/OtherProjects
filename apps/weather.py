@@ -5,6 +5,7 @@ import requests
 from datetime import datetime, timedelta
 from collections import Counter
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # Step 1: Load API key from .env file
 # Load from .env first
@@ -26,108 +27,308 @@ if not API_KEY:
         "2. Streamlit Secrets (deployed apps)"
     )
 
-# API URLs
+# API endpoints
 GEO_URL = "http://api.openweathermap.org/geo/1.0/direct"
 WEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
 FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
 AIR_POLLUTION_URL = "http://api.openweathermap.org/data/2.5/air_pollution"
 AIR_POLLUTION_FORECAST_URL = "http://api.openweathermap.org/data/2.5/air_pollution/forecast"
 
-# Data processing functions
 def get_aqi_text(aqi):
-    return {
+    """Convert AQI value to text description"""
+    aqi_map = {
         1: "Good", 2: "Fair", 3: "Moderate",
         4: "Poor", 5: "Very Poor"
-    }.get(aqi, "Unknown")
+    }
+    return aqi_map.get(aqi, "Unknown")
 
-def get_city_coordinates(city_name):
-    params = {"q": city_name, "limit": 1, "appid": API_KEY}
+def get_user_input():
+    """Get city and country separated by last space"""
+    while True:
+        location = input("Enter city and country (e.g., 'London UK'): ").strip()
+        if location.count(" ") >= 1:
+            parts = location.rsplit(" ", 1)
+            return parts[0], parts[1]
+        print("Invalid format. Use 'City Country'")
+
+def get_coordinates(city, country):
+    """Get latitude and longitude for location"""
+    params = {"q": f"{city},{country}", "limit": 1, "appid": API_KEY}
     response = requests.get(GEO_URL, params=params)
-    if response.status_code != 200 or not response.json():
-        raise ValueError(f"City '{city_name}' not found")
-    return response.json()[0]["lat"], response.json()[0]["lon"]
+    if response.status_code == 200 and response.json():
+        data = response.json()[0]
+        return data["lat"], data["lon"]
+    raise ValueError(f"Location not found: {city}, {country}")
 
-def fetch_weather_data(lat, lon):
-    params = {"lat": lat, "lon": lon, "appid": API_KEY, "units": "metric"}
-    return _handle_api_request(WEATHER_URL, params, "weather data")
+def fetch_data(url, lat, lon, params=None):
+    """Generic API request handler"""
+    base_params = {"lat": lat, "lon": lon, "appid": API_KEY, "units": "metric"}
+    if params: base_params.update(params)
+    try:
+        response = requests.get(url, params=base_params, timeout=15)
+        return response.json() if response.status_code == 200 else None
+    except Exception as e:
+        print(f"API Error: {str(e)}")
+        return None
 
-def fetch_forecast_data(lat, lon):
-    params = {"lat": lat, "lon": lon, "appid": API_KEY, "units": "metric"}
-    return _handle_api_request(FORECAST_URL, params, "forecast data")
-
-def fetch_air_pollution_data(lat, lon):
-    params = {"lat": lat, "lon": lon, "appid": API_KEY}
-    return _handle_api_request(AIR_POLLUTION_URL, params, "air pollution data")
-
-def fetch_air_pollution_forecast(lat, lon):
-    params = {"lat": lat, "lon": lon, "appid": API_KEY}
-    return _handle_api_request(AIR_POLLUTION_FORECAST_URL, params, "air pollution forecast")
-
-def _handle_api_request(url, params, error_context):
-    response = requests.get(url, params=params)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching {error_context}: {response.status_code}")
-    return response.json()
-
-# Data formatting functions
-def prepare_weather_table(data, air_pollution_data=None):
-    main_data = data.get("main", {})
-    weather_data = data.get("weather", [{}])[0]
-    sys_data = data.get("sys", {})
+def prepare_current_weather(data, aqi_data=None):
+    """Process current weather data"""
+    if not data or data.get("cod") != 200:
+        return None
     
-    table_data = [
-        ["City", f"{data.get('name')}, {sys_data.get('country')}"],
-        ["Temperature", f"{main_data.get('temp', 'N/A')}°C"],
-        ["Feels Like", f"{main_data.get('feels_like', 'N/A')}°C"],
-        ["Weather", weather_data.get('description', 'N/A')],
-        ["Pressure", f"{main_data.get('pressure', 'N/A')} hPa"],
-        ["Humidity", f"{main_data.get('humidity', 'N/A')}%"],
-        ["Wind Speed", f"{data.get('wind', {}).get('speed', 'N/A')} m/s"],
-        ["Rain (1h)", f"{data.get('rain', {}).get('1h', 0)} mm"]
-    ]
+    main = data.get("main", {})
+    weather = data.get("weather", [{}])[0]
+    wind = data.get("wind", {})
+    sys = data.get("sys", {})
+    rain = data.get("rain", {}).get("1h", 0)
+    tz_offset = data.get("timezone", 0)
     
-    if air_pollution_data:
-        aqi = air_pollution_data.get("list", [{}])[0].get("main", {}).get("aqi")
-        table_data.append(["Air Quality", get_aqi_text(aqi)])
-    
-    return table_data
+    current_time = datetime.utcfromtimestamp(data["dt"]) + timedelta(seconds=tz_offset)
+    sunrise = datetime.utcfromtimestamp(sys.get("sunrise", 0)) + timedelta(seconds=tz_offset)
+    sunset = datetime.utcfromtimestamp(sys.get("sunset", 0)) + timedelta(seconds=tz_offset)
 
-def prepare_forecast_chart_data(forecast_data):
-    chart_data = {"dates": [], "temps": [], "humidity": [], "rain": []}
-    for item in forecast_data.get("list", []):
-        chart_data["dates"].append(datetime.fromtimestamp(item.get("dt")))
-        chart_data["temps"].append(item.get("main", {}).get("temp"))
-        chart_data["humidity"].append(item.get("main", {}).get("humidity"))
-        chart_data["rain"].append(item.get("rain", {}).get("3h", 0))
-    return chart_data
+    weather_info = {
+        "City": f"{data['name']}, {sys.get('country')}",
+        "Temperature": f"{main.get('temp', 'N/A')}°C",
+        "Feels Like": f"{main.get('feels_like', 'N/A')}°C",
+        "Pressure": f"{main.get('pressure', 'N/A')} hPa",
+        "Humidity": f"{main.get('humidity', 'N/A')}%",
+        "Weather": weather.get('description', 'N/A'),
+        "Wind Speed": f"{wind.get('speed', 'N/A')} m/s",
+        "Rain (1h)": f"{rain} mm",
+        "Sunrise": sunrise.strftime('%H:%M:%S'),
+        "Sunset": sunset.strftime('%H:%M:%S'),
+        "Updated": current_time.strftime('%Y-%m-%d %H:%M:%S')
+    }
 
-def create_forecast_figure(chart_data, city_name):
-    fig, ax1 = plt.subplots(figsize=(10, 5))
+    if aqi_data and aqi_data.get("list"):
+        aqi = aqi_data["list"][0].get("main", {}).get("aqi", "N/A")
+        weather_info["AQI"] = f"{get_aqi_text(aqi)} ({aqi})" if aqi != "N/A" else "N/A"
     
-    # Temperature and Humidity
-    ax1.plot(chart_data["dates"], chart_data["temps"], marker='o', color='red', label='Temperature (°C)')
-    ax1.plot(chart_data["dates"], chart_data["humidity"], marker='o', color='green', label='Humidity (%)')
-    ax1.set_ylabel("Temperature/Humidity")
-    ax1.legend(loc='upper left')
-    ax1.grid()
+    return weather_info
+
+def prepare_forecast_summary(forecast, air_forecast=None):
+    """Create daily forecast statistics"""
+    if not forecast or not forecast.get("list"):
+        return None
+
+    try:
+        # Process forecast data
+        forecast_items = []
+        for item in forecast["list"]:
+            dt = datetime.fromtimestamp(item["dt"])
+            forecast_items.append({
+                "date": dt.strftime('%Y-%m-%d'),
+                "temp": item["main"].get("temp", 0),
+                "humidity": item["main"].get("humidity", 0),
+                "rain": item.get("rain", {}).get("3h", 0),
+                "pressure": item["main"].get("pressure", 0),
+                "wind": item["wind"].get("speed", 0)
+            })
+        
+        df = pd.DataFrame(forecast_items)
+        
+        # Add AQI data
+        if air_forecast and air_forecast.get("list"):
+            aqi_dict = {}
+            for item in air_forecast["list"]:
+                dt = datetime.fromtimestamp(item["dt"]).strftime('%Y-%m-%d')
+                aqi = item["main"].get("aqi")
+                if dt not in aqi_dict:
+                    aqi_dict[dt] = []
+                aqi_dict[dt].append(aqi)
+            
+            df["aqi"] = df["date"].map(lambda d: 
+                max(aqi_dict.get(d, []), key=aqi_dict.get(d, []).count) 
+                if aqi_dict.get(d) else None)
+
+        # Daily aggregation
+        daily = df.groupby("date", group_keys=False).apply(
+            lambda x: pd.Series({
+                "Avg Temp": f"{x['temp'].mean():.1f}°C",
+                "Avg Humidity": f"{x['humidity'].mean():.1f}%",
+                "Total Rain": f"{x['rain'].sum():.1f} mm",
+                "Avg Pressure": f"{x['pressure'].mean():.1f} hPa",
+                "Avg Wind": f"{x['wind'].mean():.1f} m/s",
+                "AQI": f"{get_aqi_text(x['aqi'].mode()[0])} ({x['aqi'].mode()[0]})" 
+                        if 'aqi' in x and not x['aqi'].isnull().all() else "N/A"
+            })
+        ).reset_index()
+        
+        return daily.to_dict('records')
     
-    # Rain
-    ax2 = ax1.twinx()
-    ax2.bar(chart_data["dates"], chart_data["rain"], color='blue', alpha=0.3, label='Rain (mm)')
-    ax2.set_ylabel("Rainfall")
-    ax2.legend(loc='upper right')
+    except Exception as e:
+        print(f"Forecast processing error: {str(e)}")
+        return None
+
+def plot_forecast(forecast, city_name):
+    """Display single city forecast plots"""
+    if not forecast or not forecast.get("list"):
+        return None
+
+    try:
+        df = pd.DataFrame([{
+            "datetime": datetime.fromtimestamp(item["dt"]),
+            "temp": item["main"].get("temp", 0),
+            "humidity": item["main"].get("humidity", 0),
+            "rain": item.get("rain", {}).get("3h", 0)
+        } for item in forecast["list"]])
+
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 8))
+        
+        ax1.plot(df["datetime"], df["temp"], 'r-')
+        ax1.set_ylabel('Temperature (°C)')
+        ax1.set_title(f'{city_name} Forecast')
+        ax1.grid(True)
+
+        ax2.plot(df["datetime"], df["humidity"], 'b-')
+        ax2.set_ylabel('Humidity (%)')
+        ax2.grid(True)
+
+        ax3.bar(df["datetime"], df["rain"], width=0.05, color='blue', alpha=0.5)
+        ax3.set_ylabel('Rain (mm)')
+        ax3.grid(True)
+
+        plt.tight_layout()
+        return fig  # Return figure instead of showing
     
-    plt.title(f"5-Day Forecast for {city_name}")
-    plt.xticks(rotation=45)
+    except Exception as e:
+        print(f"Plotting error: {str(e)}")
+        return None
+
+def plot_comparison(forecast1, forecast2, city1_name, city2_name):
+    """Compare two cities' forecasts visually"""
+    def prepare_df(forecast):
+        return pd.DataFrame([{
+            "datetime": datetime.fromtimestamp(item["dt"]),
+            "temp": item["main"]["temp"],
+            "humidity": item["main"]["humidity"],
+            "rain": item.get("rain", {}).get("3h", 0)
+        } for item in forecast["list"]])
+    
+    df1 = prepare_df(forecast1)
+    df2 = prepare_df(forecast2)
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
+    
+    # Temperature comparison
+    ax1.plot(df1["datetime"], df1["temp"], label=city1_name, marker='o')
+    ax1.plot(df2["datetime"], df2["temp"], label=city2_name, marker='o')
+    ax1.set_ylabel('Temperature (°C)')
+    ax1.legend()
+    ax1.grid(True)
+    ax1.set_title(f'Temperature Comparison: {city1_name} vs {city2_name}')
+
+    # Humidity comparison
+    ax2.plot(df1["datetime"], df1["humidity"], label=city1_name, marker='o')
+    ax2.plot(df2["datetime"], df2["humidity"], label=city2_name, marker='o')
+    ax2.set_ylabel('Humidity (%)')
+    ax2.legend()
+    ax2.grid(True)
+    ax2.set_title('Humidity Comparison')
+
+    # Rain comparison
+    ax3.bar(df1["datetime"], df1["rain"], width=0.03, label=city1_name, alpha=0.5)
+    ax3.bar(df2["datetime"], df2["rain"], width=0.03, label=city2_name, alpha=0.5)
+    ax3.set_ylabel('Rain (mm)')
+    ax3.legend()
+    ax3.grid(True)
+    ax3.set_title('Rainfall Comparison')
+
     plt.tight_layout()
-    return fig
+    return fig  # Return figure instead of showing
 
-# CLI-specific functions
-def cli_display_table(data, headers, title):
-    print(f"\n--- {title} ---")
-    print(tabulate(data, headers=headers, tablefmt="grid"))
-    print("-----------------------")
 
-def cli_main():
-    # CLI implementation using the functions above
-    pass  # (Original CLI implementation goes here)
+def main():
+    """Main application flow"""
+    try:
+        print("1. View city weather\n2. Compare cities")
+        choice = input("Choose option (1/2): ").strip()
+
+        if choice == "1":
+            city, country = get_user_input()
+            lat, lon = get_coordinates(city, country)
+            
+            # Fetch data
+            weather = fetch_data(WEATHER_URL, lat, lon)
+            aqi_current = fetch_data(AIR_POLLUTION_URL, lat, lon)
+            forecast = fetch_data(FORECAST_URL, lat, lon)
+            aqi_forecast = fetch_data(AIR_POLLUTION_FORECAST_URL, lat, lon)
+            
+            # Current weather
+            current = prepare_current_weather(weather, aqi_current)
+            if current:
+                print("\n=== Current Weather ===")
+                print(tabulate([(k, v) for k, v in current.items()], tablefmt="grid"))
+            
+            # Forecast visualization
+            if forecast:
+                plot_forecast(forecast, city)
+            
+            # Forecast summary
+            summary = prepare_forecast_summary(forecast, aqi_forecast)
+            if summary:
+                print("\n=== Daily Forecast Summary ===")
+                print(tabulate(summary, headers="keys", tablefmt="grid"))
+
+        elif choice == "2":
+            print("\nFirst city:")
+            city1, country1 = get_user_input()
+            lat1, lon1 = get_coordinates(city1, country1)
+            
+            print("\nSecond city:")
+            city2, country2 = get_user_input()
+            lat2, lon2 = get_coordinates(city2, country2)
+            
+            # Fetch data
+            data1 = {
+                "weather": fetch_data(WEATHER_URL, lat1, lon1),
+                "aqi": fetch_data(AIR_POLLUTION_URL, lat1, lon1),
+                "forecast": fetch_data(FORECAST_URL, lat1, lon1),
+                "aqi_forecast": fetch_data(AIR_POLLUTION_FORECAST_URL, lat1, lon1)
+            }
+            data2 = {
+                "weather": fetch_data(WEATHER_URL, lat2, lon2),
+                "aqi": fetch_data(AIR_POLLUTION_URL, lat2, lon2),
+                "forecast": fetch_data(FORECAST_URL, lat2, lon2),
+                "aqi_forecast": fetch_data(AIR_POLLUTION_FORECAST_URL, lat2, lon2)
+            }
+            
+            # Current comparison
+            current1 = prepare_current_weather(data1["weather"], data1["aqi"])
+            current2 = prepare_current_weather(data2["weather"], data2["aqi"])
+            if current1 and current2:
+                print("\n=== Current Weather Comparison ===")
+                comparison = []
+                for key in current1:
+                    comparison.append([key, current1[key], current2[key]])
+                print(tabulate(comparison, headers=["Attribute", "City 1", "City 2"], tablefmt="grid"))
+            
+            # Forecast comparison
+            if data1["forecast"] and data2["forecast"]:
+                # Visual comparison
+                plot_comparison(data1["forecast"], data2["forecast"], city1, city2)
+                
+                # Prepare summaries
+                summary1 = prepare_forecast_summary(data1["forecast"], data1["aqi_forecast"])
+                summary2 = prepare_forecast_summary(data2["forecast"], data2["aqi_forecast"])
+                
+                if summary1 and summary2:
+                    # Add city identifiers
+                    for entry in summary1:
+                        entry["City"] = city1
+                    for entry in summary2:
+                        entry["City"] = city2
+                    
+                    combined = summary1 + summary2
+                    print("\n=== Combined Forecast Summary ===")
+                    print(tabulate(combined, headers="keys", tablefmt="grid"))
+
+        else:
+            print("Invalid choice")
+
+    except Exception as e:
+        print(f"Application error: {str(e)}")
+
+if __name__ == "__main__":
+    main()

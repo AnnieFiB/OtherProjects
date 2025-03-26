@@ -1,94 +1,113 @@
-# app.py (Streamlit interface)
 import streamlit as st
-import sys
-from pathlib import Path
+import matplotlib.pyplot as plt
+import pandas as pd
 from weather import (
-    get_city_coordinates, fetch_weather_data, fetch_forecast_data,
-    fetch_air_pollution_data, fetch_air_pollution_forecast,
-    prepare_weather_table, prepare_forecast_chart_data, create_forecast_figure
+    get_coordinates, fetch_data, prepare_current_weather,
+    prepare_forecast_summary, plot_forecast, plot_comparison,
+    WEATHER_URL, AIR_POLLUTION_URL, FORECAST_URL, AIR_POLLUTION_FORECAST_URL
 )
 
-# Configure system path
-script_path = Path(__file__).resolve().parent / "DataAnalysis" / "scripts"
-sys.path.append(str(script_path))
-
-# Streamlit app
-st.title("Weather Explorer")
+st.set_page_config(page_title="Weather Comparison App", layout="wide")
+st.title("🌤️ Weather & Air Quality Explorer")
 st.markdown("Explore weather data and compare forecasts interactively!")
 
-option = st.radio(
-    "Choose an action:",
-    ("View City Forecast", "Compare Cities")
-)
+option = st.radio("Choose an option:", ["View Single City", "Compare Two Cities"])
 
-if option == "View City Forecast":
-    city = st.text_input("Enter city name:")
-    if city:
-        try:
-            lat, lon = get_city_coordinates(city)
-            st.success(f"Coordinates found: {lat:.2f}, {lon:.2f}")
-            
-            # Current weather
-            weather_data = fetch_weather_data(lat, lon)
-            pollution_data = fetch_air_pollution_data(lat, lon)
-            weather_table = prepare_weather_table(weather_data, pollution_data)
-            
-            st.subheader("Current Conditions")
-            st.table(weather_table)
-            
-            # Forecast
-            forecast_data = fetch_forecast_data(lat, lon)
-            chart_data = prepare_forecast_chart_data(forecast_data)
-            fig = create_forecast_figure(chart_data, city)
-            
-            st.subheader("5-Day Forecast")
-            st.pyplot(fig)
-            
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+def display_current_weather(city, country):
+    lat, lon = get_coordinates(city, country)
+    weather = fetch_data(WEATHER_URL, lat, lon)
+    aqi_data = fetch_data(AIR_POLLUTION_URL, lat, lon)
+    current = prepare_current_weather(weather, aqi_data)
+    if current:
+        st.subheader(f"📍 Current Weather: {city}, {country}")
+        for k, v in current.items():
+            if k in ["Temperature", "Feels Like"]:
+                st.markdown(f"**{k}: {v}**")
+            else:
+                st.markdown(f"{k}: {v}")
+    return lat, lon
 
-elif option == "Compare Cities":
-    col1, col2 = st.columns(2)
-    with col1:
-        city1 = st.text_input("City 1:")
-    with col2:
-        city2 = st.text_input("City 2:")
-    
-    if city1 and city2:
-        try:
-            # City 1 Data
-            lat1, lon1 = get_city_coordinates(city1)
-            weather1 = fetch_weather_data(lat1, lon1)
-            forecast1 = fetch_forecast_data(lat1, lon1)
-            
-            # City 2 Data
-            lat2, lon2 = get_city_coordinates(city2)
-            weather2 = fetch_weather_data(lat2, lon2)
-            forecast2 = fetch_forecast_data(lat2, lon2)
-            
-            # Comparison Table
-            comparison_data = [
-                ["Temperature", f"{weather1['main']['temp']}°C", f"{weather2['main']['temp']}°C"],
-                ["Humidity", f"{weather1['main']['humidity']}%", f"{weather2['main']['humidity']}%"],
-                ["Wind Speed", f"{weather1['wind']['speed']} m/s", f"{weather2['wind']['speed']} m/s"]
-            ]
-            
-            st.subheader("Current Comparison")
-            st.table(comparison_data)
-            
-            # Forecast Comparison Chart
-            fig, ax = plt.subplots(figsize=(10, 5))
-            chart1 = prepare_forecast_chart_data(forecast1)
-            chart2 = prepare_forecast_chart_data(forecast2)
-            
-            ax.plot(chart1["dates"], chart1["temps"], label=f"{city1} Temp")
-            ax.plot(chart2["dates"], chart2["temps"], label=f"{city2} Temp")
-            ax.set_ylabel("Temperature (°C)")
-            ax.legend()
-            ax.grid()
-            
-            st.subheader("Temperature Forecast Comparison")
+def display_forecast(city, lat, lon):
+    forecast = fetch_data(FORECAST_URL, lat, lon)
+    air_forecast = fetch_data(AIR_POLLUTION_FORECAST_URL, lat, lon)
+
+    if forecast:
+        st.subheader(f"📊 5-Day Forecast for {city}")
+        fig = plot_forecast(forecast, city)
+        if fig:
             st.pyplot(fig)
-            
-        except Exception as e:
-            st.error(f"Comparison error: {str(e)}")
+        else:
+            st.error("Failed to generate forecast plot.")
+
+        summary = prepare_forecast_summary(forecast, air_forecast)
+        if summary:
+            st.subheader("🧾 Forecast Summary")
+            st.dataframe(pd.DataFrame(summary))
+        else:
+            st.warning("No forecast summary available.")
+
+if option == "View Single City":
+    with st.form("single_city_form"):
+        city = st.text_input("City", "London")
+        country = st.text_input("Country", "UK")
+        submitted = st.form_submit_button("Get Weather")
+        if submitted:
+            lat, lon = display_current_weather(city, country)
+            display_forecast(city, lat, lon)
+
+elif option == "Compare Two Cities":
+    with st.form("compare_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            city1 = st.text_input("City 1", "London")
+            country1 = st.text_input("Country 1", "UK")
+        with col2:
+            city2 = st.text_input("City 2", "New York")
+            country2 = st.text_input("Country 2", "US")
+        submitted = st.form_submit_button("Compare")
+        if submitted:
+            lat1, lon1 = get_coordinates(city1, country1)
+            lat2, lon2 = get_coordinates(city2, country2)
+
+            data1 = {
+                "weather": fetch_data(WEATHER_URL, lat1, lon1),
+                "aqi": fetch_data(AIR_POLLUTION_URL, lat1, lon1),
+                "forecast": fetch_data(FORECAST_URL, lat1, lon1),
+                "aqi_forecast": fetch_data(AIR_POLLUTION_FORECAST_URL, lat1, lon1)
+            }
+            data2 = {
+                "weather": fetch_data(WEATHER_URL, lat2, lon2),
+                "aqi": fetch_data(AIR_POLLUTION_URL, lat2, lon2),
+                "forecast": fetch_data(FORECAST_URL, lat2, lon2),
+                "aqi_forecast": fetch_data(AIR_POLLUTION_FORECAST_URL, lat2, lon2)
+            }
+
+            st.subheader("🌍 Current Weather Comparison")
+            current1 = prepare_current_weather(data1["weather"], data1["aqi"])
+            current2 = prepare_current_weather(data2["weather"], data2["aqi"])
+            if current1 and current2:
+                rows = list(current1.keys())
+                st.dataframe({
+                    "Attribute": rows,
+                    city1: [current1[k] for k in rows],
+                    city2: [current2[k] for k in rows]
+                })
+
+            if data1["forecast"] and data2["forecast"]:
+                st.subheader("📈 Forecast Comparison")
+                fig = plot_comparison(data1["forecast"], data2["forecast"], city1, city2)
+                if fig:
+                    st.pyplot(fig)
+                else:
+                    st.error("Failed to generate comparison plot.")
+
+                summary1 = prepare_forecast_summary(data1["forecast"], data1["aqi_forecast"])
+                summary2 = prepare_forecast_summary(data2["forecast"], data2["aqi_forecast"])
+                if summary1 and summary2:
+                    for row in summary1:
+                        row["City"] = city1
+                    for row in summary2:
+                        row["City"] = city2
+                    combined = summary1 + summary2
+                    st.subheader("🧾 Combined Forecast Summary")
+                    st.dataframe(pd.DataFrame(combined))
