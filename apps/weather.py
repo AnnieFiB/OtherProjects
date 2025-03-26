@@ -7,34 +7,21 @@ from collections import Counter
 import matplotlib.pyplot as plt
 
 def load_env():
-    # Get the correct root path for your project
-    current_script_path = Path(__file__).resolve()
-    
-    # Navigate up 1 level if in "apps" folder
-    if current_script_path.parent.name == "apps":
-        root_dir = current_script_path.parent.parent
-    else:
-        root_dir = current_script_path.parent
-    
-    env_path = root_dir / ".env"
+    # Get the project root (2 levels up from this file's location)
+    project_root = Path(__file__).resolve().parent.parent
+    env_path = project_root / ".env"
     
     if not env_path.exists():
-        # Try alternative paths for debugging
-        alt_paths = [
-            root_dir / ".env",
-            current_script_path.parent / ".env",
-            Path.cwd() / ".env"
-        ]
-        error_msg = "\n".join([f"- {p}" for p in alt_paths])
         raise FileNotFoundError(
-            f".env file not found. Check these locations:\n{error_msg}"
+            f".env file not found at: {env_path}\n"
+            "Keep your .env file in the project root (same level as apps folder)"
         )
     
     load_dotenv(env_path)
     api_key = os.getenv("OPENWEATHER_API_KEY")
     
     if not api_key:
-        raise ValueError("OPENWEATHER_API_KEY not found in .env file")
+        raise ValueError("OPENWEATHER_API_KEY missing in .env")
     
     return api_key
 
