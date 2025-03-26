@@ -40,14 +40,12 @@ def get_aqi_text(aqi):
         4: "Poor", 5: "Very Poor"
     }.get(aqi, "Unknown")
 
-def get_city_coordinates(location_input):
-    params = {"q": location_input, "limit": 1, "appid": API_KEY}
+def get_city_coordinates(city_name):
+    params = {"q": city_name, "limit": 1, "appid": API_KEY}
     response = requests.get(GEO_URL, params=params)
     if response.status_code != 200 or not response.json():
-        raise ValueError(f"Location '{location_input}' not found")
-    data = response.json()[0]
-    return data["lat"], data["lon"]
-
+        raise ValueError(f"City '{city_name}' not found")
+    return response.json()[0]["lat"], response.json()[0]["lon"]
 
 def fetch_weather_data(lat, lon):
     params = {"lat": lat, "lon": lon, "appid": API_KEY, "units": "metric"}
