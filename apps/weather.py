@@ -107,8 +107,8 @@ def prepare_current_weather(data, aqi_data=None):
     
     return weather_info
 
-def prepare_forecast_summary(forecast, air_forecast=None):
-    """Create daily forecast statistics"""
+def prepare_forecast_summary(forecast, air_forecast=None, city_name=""):
+    """Create daily forecast statistics with city-specific columns"""
     if not forecast or not forecast.get("list"):
         return None
 
@@ -142,18 +142,35 @@ def prepare_forecast_summary(forecast, air_forecast=None):
                 max(aqi_dict.get(d, []), key=aqi_dict.get(d, []).count) 
                 if aqi_dict.get(d) else None)
 
-        # Daily aggregation
-        daily = df.groupby("date", group_keys=False).apply(
-            lambda x: pd.Series({
-                "Avg Temp": f"{x['temp'].mean():.1f}°C",
-                "Avg Humidity": f"{x['humidity'].mean():.1f}%",
-                "Total Rain": f"{x['rain'].sum():.1f} mm",
-                "Avg Pressure": f"{x['pressure'].mean():.1f} hPa",
-                "Avg Wind": f"{x['wind'].mean():.1f} m/s",
-                "AQI": f"{get_aqi_text(x['aqi'].mode()[0])} ({x['aqi'].mode()[0]})" 
-                        if 'aqi' in x and not x['aqi'].isnull().all() else "N/A"
-            })
-        ).reset_index()
+        # Daily aggregation and city prefix
+        daily = df.groupby("date").agg({
+            "temp": "mean",
+            "humidity": "mean",
+            "rain": "sum",
+            "pressure": "mean",
+            "wind": "mean",
+            "aqi": lambda x: x.mode()[0] if not x.isnull().all() else None
+        }).reset_index()
+        
+        # Format values and add units
+        daily["temp"] = daily["temp"].round(1).astype(str) + '°C'
+        daily["humidity"] = daily["humidity"].round(1).astype(str) + '%'
+        daily["rain"] = daily["rain"].round(1).astype(str) + ' mm'
+        daily["pressure"] = daily["pressure"].round(1).astype(str) + ' hPa'
+        daily["wind"] = daily["wind"].round(1).astype(str) + ' m/s'
+        
+        # Fixed AQI formatting (text only)
+        daily["aqi"] = daily["aqi"].apply(
+            lambda x: get_aqi_text(x) if pd.notnull(x) else "N/A"
+        )
+        
+        daily.columns = ["Date", 
+                        f"Avg Temp ({city_name})",
+                        f"Avg Humidity ({city_name})",
+                        f"Total Rain ({city_name})",
+                        f"Avg Pressure ({city_name})",
+                        f"Avg Wind ({city_name})",
+                        f"AQI ({city_name})"]
         
         return daily.to_dict('records')
     

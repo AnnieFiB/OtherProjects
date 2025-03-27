@@ -10,23 +10,38 @@ from weather import (
 # Initialize session state
 if 'history' not in st.session_state:
     st.session_state.history = []
+if 'selected_city' not in st.session_state:
+    st.session_state.selected_city = "London"
+if 'selected_country' not in st.session_state:
+    st.session_state.selected_country = "England"
 
 st.set_page_config(page_title="Weather Comparison App", layout="wide")
 st.title("🌤️ Weather & Air Quality Explorer")
 st.markdown("Explore weather data and compare forecasts interactively!")
 
-# Style configuration
-st.markdown("""
-<style>
-.big-font {
-    font-size:24px !important;
-    font-weight: bold !important;
-    color: #1f77b4 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+option = st.radio("Choose an option:", ["View Single City", "Compare Two Cities"], horizontal=True)
 
-option = st.radio("Choose an option:", ["View Single City", "Compare Two Cities"])
+def update_history(city, country):
+    """Update search history with new entry"""
+    entry = (city.strip().title(), country.strip().upper())
+    history = [e for e in st.session_state.history if e != entry]
+    history.insert(0, entry)
+    st.session_state.history = history[:5]
+
+def show_search_history():
+    """Display clickable search history in sidebar"""
+    if st.session_state.history:
+        st.sidebar.subheader("🔍 Recent Searches")
+        for idx, (h_city, h_country) in enumerate(st.session_state.history):
+            if st.sidebar.button(
+                f"{h_city}, {h_country}",
+                key=f"hist_{idx}",
+                help="Click to search again",
+                use_container_width=True
+            ):
+                st.session_state.selected_city = h_city
+                st.session_state.selected_country = h_country
+                st.rerun()
 
 def display_current_weather(city, country):
     try:
@@ -34,15 +49,35 @@ def display_current_weather(city, country):
         weather = fetch_data(WEATHER_URL, lat, lon)
         aqi_data = fetch_data(AIR_POLLUTION_URL, lat, lon)
         current = prepare_current_weather(weather, aqi_data)
+        
         if current:
             st.subheader(f"📍 Current Weather: {city}, {country}")
-            # Arrange weather details horizontally
-            cols = st.columns(len(current))
-            for idx, (k, v) in enumerate(current.items()):
-                if k in ["Temperature", "Feels Like"]:
-                    cols[idx].markdown(f'<p style="font-size:24px; font-weight:bold; color:#1f77b4;">{k}: {v}</p>', unsafe_allow_html=True)
-                else:
-                    cols[idx].markdown(f"**{k}**: {v}")
+            st.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">⏲️ Current Date: {current["Updated"]}</p>', unsafe_allow_html=True)
+            
+            # Main metrics row
+            col1, col2, col3, col4 = st.columns(4)
+            col1.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">🌡️Temperature: {current["Temperature"]}</p>', unsafe_allow_html=True)
+            col2.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">💨Feels Like: {current["Feels Like"]}</p>', unsafe_allow_html=True)
+            col3.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">🌫️Air Quality: {current["AQI"]}</p>', unsafe_allow_html=True)
+
+            # Secondary metrics row
+            col5, col6, col7, col8 = st.columns(4)
+            
+            # Column 5
+            col5.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌤️{current["Weather"]}</p>', unsafe_allow_html=True)
+            col5.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">💧Humidity: {current["Humidity"]}</p>', unsafe_allow_html=True)
+            
+            # Column 6
+            col6.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🎐Wind Speed: {current["Wind Speed"]}</p>', unsafe_allow_html=True)
+            col6.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌧️Rain: {current["Rain (1h)"]}</p>', unsafe_allow_html=True)
+            
+            # Column 7
+            col7.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌅Sunrise: {current["Sunrise"]}</p>', unsafe_allow_html=True)
+            col7.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌇Sunset: {current["Sunset"]}</p>', unsafe_allow_html=True)
+            
+            # Column 8
+            col8.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">📊Pressure: {current["Pressure"]}</p>', unsafe_allow_html=True)
+
             return lat, lon
         return None, None
     except Exception as e:
@@ -65,10 +100,10 @@ def display_forecast(city, lat, lon):
             else:
                 st.warning("Forecast data not available for visualization")
 
-            summary = prepare_forecast_summary(forecast, air_forecast)
+            summary = prepare_forecast_summary(forecast, air_forecast, city)
             if summary:
                 st.subheader("🧾 Forecast Summary")
-                st.dataframe(pd.DataFrame(summary))
+                st.dataframe(pd.DataFrame(summary), use_container_width=True)
             else:
                 st.warning("No forecast summary available")
         else:
@@ -76,29 +111,17 @@ def display_forecast(city, lat, lon):
     except Exception as e:
         st.error(f"Error processing forecast: {str(e)}")
 
-def show_search_history():
-    if st.session_state.history:
-        st.sidebar.subheader("🔍 Search History")
-        for idx, (h_city, h_country) in enumerate(st.session_state.history[:5]):
-            if st.sidebar.button(f"{h_city}, {h_country}", key=f"hist_{idx}"):
-                st.session_state.selected_city = h_city
-                st.session_state.selected_country = h_country
-                st.experimental_rerun()
-
 if option == "View Single City":
     show_search_history()
     with st.form("single_city_form"):
-        city = st.text_input("City", value=st.session_state.get("selected_city", "London"))
-        country = st.text_input("Country", value=st.session_state.get("selected_country", "UK"))
+        city = st.text_input("City", value=st.session_state.selected_city)
+        country = st.text_input("Country", value=st.session_state.selected_country)
         submitted = st.form_submit_button("Get Weather")
+        
         if submitted:
+            update_history(city, country)
             lat, lon = display_current_weather(city, country)
             display_forecast(city, lat, lon)
-            # Update history
-            new_entry = (city, country)
-            if new_entry not in st.session_state.history:
-                st.session_state.history.insert(0, new_entry)
-                st.session_state.history = st.session_state.history[:5]
 
 elif option == "Compare Two Cities":
     show_search_history()
@@ -106,13 +129,17 @@ elif option == "Compare Two Cities":
         col1, col2 = st.columns(2)
         with col1:
             city1 = st.text_input("City 1", "London")
-            country1 = st.text_input("Country 1", "UK")
+            country1 = st.text_input("Country 1", "England")
         with col2:
             city2 = st.text_input("City 2", "New York")
             country2 = st.text_input("Country 2", "US")
         submitted = st.form_submit_button("Compare")
+        
         if submitted:
             try:
+                update_history(city1, country1)
+                update_history(city2, country2)
+
                 lat1, lon1 = get_coordinates(city1, country1)
                 lat2, lon2 = get_coordinates(city2, country2)
 
@@ -134,13 +161,45 @@ elif option == "Compare Two Cities":
                     st.subheader("🌍 Current Weather Comparison")
                     current1 = prepare_current_weather(data1["weather"], data1["aqi"])
                     current2 = prepare_current_weather(data2["weather"], data2["aqi"])
+                    st.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">⏲️ Current Date: {current1["Updated"]}</p>', unsafe_allow_html=True)
+            
                     if current1 and current2:
-                        comparison_df = pd.DataFrame({
-                            "Attribute": current1.keys(),
-                            city1: current1.values(),
-                            city2: current2.values()
-                        })
-                        st.dataframe(comparison_df)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f'</p>{current1["City"]}</p>', unsafe_allow_html=True)
+
+                            c1_col1, c1_col2, c1_col3, c1_col4 = st.columns(4)
+                            c1_col1.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">🌡️ {current1["Temperature"]}</p>', unsafe_allow_html=True)
+                            c1_col2.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">💨Feels Like: {current1["Feels Like"]}</p>', unsafe_allow_html=True)
+                            c1_col3.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">🌫️Air Quality is {current1["AQI"]}</p>', unsafe_allow_html=True)
+
+                            # Secondary metrics row
+                            c1_col5, c1_col6, c1_col7, c1_col8 = st.columns(4)
+                            c1_col5.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌤️ {current1["Weather"]}</p>', unsafe_allow_html=True)
+                            c1_col5.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">💧{current1["Humidity"]}</p>', unsafe_allow_html=True)
+                            c1_col6.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🎐{current1["Wind Speed"]}</p>', unsafe_allow_html=True)
+                            c1_col6.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌧️{current1["Rain (1h)"]}</p>', unsafe_allow_html=True)
+                            c1_col7.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌅 {current1["Sunrise"]}</p>', unsafe_allow_html=True)
+                            c1_col7.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌇 {current1["Sunset"]}</p>', unsafe_allow_html=True)
+                            c1_col8.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">📊{current1["Pressure"]}</p>', unsafe_allow_html=True)
+
+                        with col2:
+                            st.markdown(f'</p>{current2["City"]}</p>', unsafe_allow_html=True)
+
+                            c2_col1, c2_col2, c2_col3, c2_col4 = st.columns(4)
+                            c2_col1.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">🌡️ {current2["Temperature"]}</p>', unsafe_allow_html=True)
+                            c2_col2.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">💨Feels Like: {current2["Feels Like"]}</p>', unsafe_allow_html=True)
+                            c2_col3.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">🌫️Air Quality: {current2["AQI"]}</p>', unsafe_allow_html=True)
+
+                            # Secondary metrics row
+                            c2_col5, c2_col6, c2_col7, c2_col8 = st.columns(4)
+                            c2_col5.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌤️ {current2["Weather"]}</p>', unsafe_allow_html=True)
+                            c2_col5.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">💧{current2["Humidity"]}</p>', unsafe_allow_html=True)
+                            c2_col6.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🎐{current2["Wind Speed"]}</p>', unsafe_allow_html=True)
+                            c2_col6.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌧️{current2["Rain (1h)"]}</p>', unsafe_allow_html=True)
+                            c2_col7.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌅 {current2["Sunrise"]}</p>', unsafe_allow_html=True)
+                            c2_col7.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌇 {current2["Sunset"]}</p>', unsafe_allow_html=True)
+                            c2_col8.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">📊{current2["Pressure"]}</p>', unsafe_allow_html=True)
 
                 # Forecast comparison
                 if data1["forecast"] and data2["forecast"]:
@@ -149,24 +208,29 @@ elif option == "Compare Two Cities":
                     if fig:
                         st.pyplot(fig)
                     
-                    # Combined summary
-                    summary1 = prepare_forecast_summary(data1["forecast"], data1["aqi_forecast"])
-                    summary2 = prepare_forecast_summary(data2["forecast"], data2["aqi_forecast"])
+                    # Get formatted summaries
+                    summary1 = prepare_forecast_summary(data1["forecast"], data1["aqi_forecast"], city1)
+                    summary2 = prepare_forecast_summary(data2["forecast"], data2["aqi_forecast"], city2)
+                    
                     if summary1 and summary2:
-                        combined = pd.DataFrame(summary1 + summary2)
-                        combined["City"] = [city1]*len(summary1) + [city2]*len(summary2)
+                        # Convert to DataFrames
+                        df1 = pd.DataFrame(summary1)
+                        df2 = pd.DataFrame(summary2)
+                        
+                        # Merge on Date column
+                        combined = pd.merge(df1, df2, on="Date", how="outer")
+                        
+                        # Create logical column order
+                        column_order = ["Date"]
+                        metrics = ["Avg Temp", "Avg Humidity", "Total Rain", 
+                                  "Avg Pressure", "Avg Wind", "AQI"]
+                        
+                        for metric in metrics:
+                            column_order.extend([f"{metric} ({city1})", f"{metric} ({city2})"])
+                        
+                        # Display formatted comparison
                         st.subheader("🧾 Combined Forecast Summary")
-                        st.dataframe(combined)
-
-                # Update history
-                for entry in [(city1, country1), (city2, country2)]:
-                    if entry not in st.session_state.history:
-                        st.session_state.history.insert(0, entry)
-                        st.session_state.history = st.session_state.history[:5]
+                        st.dataframe(combined[column_order], use_container_width=True)
 
             except Exception as e:
                 st.error(f"Comparison failed: {str(e)}")
-
-
-
-
