@@ -164,44 +164,45 @@ elif option == "Compare Two Cities":
                     st.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">⏲️ Current Date: {current1["Updated"]}</p>', unsafe_allow_html=True)
             
                     if current1 and current2:
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.markdown(f'</p>{current1["City"]}</p>', unsafe_allow_html=True)
-
-                            c1_col1, c1_col2, c1_col3, c1_col4 = st.columns(4)
-                            c1_col1.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">🌡️ {current1["Temperature"]}</p>', unsafe_allow_html=True)
-                            c1_col2.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">💨Feels Like: {current1["Feels Like"]}</p>', unsafe_allow_html=True)
-                            c1_col3.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">🌫️Air Quality is {current1["AQI"]}</p>', unsafe_allow_html=True)
-
-                            # Secondary metrics row
-                            c1_col5, c1_col6, c1_col7, c1_col8 = st.columns(4)
-                            c1_col5.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌤️ {current1["Weather"]}</p>', unsafe_allow_html=True)
-                            c1_col5.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">💧{current1["Humidity"]}</p>', unsafe_allow_html=True)
-                            c1_col6.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🎐{current1["Wind Speed"]}</p>', unsafe_allow_html=True)
-                            c1_col6.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌧️{current1["Rain (1h)"]}</p>', unsafe_allow_html=True)
-                            c1_col7.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌅 {current1["Sunrise"]}</p>', unsafe_allow_html=True)
-                            c1_col7.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌇 {current1["Sunset"]}</p>', unsafe_allow_html=True)
-                            c1_col8.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">📊{current1["Pressure"]}</p>', unsafe_allow_html=True)
-
-                        with col2:
-                            st.markdown(f'</p>{current2["City"]}</p>', unsafe_allow_html=True)
-
-                            c2_col1, c2_col2, c2_col3, c2_col4 = st.columns(4)
-                            c2_col1.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">🌡️ {current2["Temperature"]}</p>', unsafe_allow_html=True)
-                            c2_col2.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">💨Feels Like: {current2["Feels Like"]}</p>', unsafe_allow_html=True)
-                            c2_col3.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">🌫️Air Quality: {current2["AQI"]}</p>', unsafe_allow_html=True)
-
-                            # Secondary metrics row
-                            c2_col5, c2_col6, c2_col7, c2_col8 = st.columns(4)
-                            c2_col5.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌤️ {current2["Weather"]}</p>', unsafe_allow_html=True)
-                            c2_col5.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">💧{current2["Humidity"]}</p>', unsafe_allow_html=True)
-                            c2_col6.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🎐{current2["Wind Speed"]}</p>', unsafe_allow_html=True)
-                            c2_col6.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌧️{current2["Rain (1h)"]}</p>', unsafe_allow_html=True)
-                            c2_col7.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌅 {current2["Sunrise"]}</p>', unsafe_allow_html=True)
-                            c2_col7.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">🌇 {current2["Sunset"]}</p>', unsafe_allow_html=True)
-                            c2_col8.markdown(f'<p style="font-size:20px; font-weight:100; margin:12px 0;">📊{current2["Pressure"]}</p>', unsafe_allow_html=True)
-
-                # Forecast comparison
+                        # City 1
+                        st.markdown(f"### {city1}")
+                        # Main metrics
+                        col1, col2, col3 = st.columns(3)
+                        col1.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">🌡️ {current1["Temperature"]}</p>', unsafe_allow_html=True)
+                        col2.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">💨 {current1["Feels Like"]}</p>', unsafe_allow_html=True)
+                        col3.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">🌫️ {current1["AQI"]}</p>', unsafe_allow_html=True)
+                        
+                        # Secondary metrics
+                        col4, col5, col6, col7 = st.columns(4)
+                        col4.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌤️ {current1["Weather"]}</p>', unsafe_allow_html=True)
+                        col4.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">💧 {current1["Humidity"]}</p>', unsafe_allow_html=True)
+                        col5.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🎐 {current1["Wind Speed"]}</p>', unsafe_allow_html=True)
+                        col5.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌧️ {current1["Rain (1h)"]}</p>', unsafe_allow_html=True)
+                        col6.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌅 {current1["Sunrise"]}</p>', unsafe_allow_html=True)
+                        col6.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌇 {current1["Sunset"]}</p>', unsafe_allow_html=True)
+                        col7.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">📊 {current1["Pressure"]}</p>', unsafe_allow_html=True)
+                        
+                        st.markdown("---")
+                        
+                        # City 2
+                        st.markdown(f"### {city2}")
+                        # Main metrics
+                        col8, col9, col10 = st.columns(3)
+                        col8.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">🌡️ {current2["Temperature"]}</p>', unsafe_allow_html=True)
+                        col9.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">💨 {current2["Feels Like"]}</p>', unsafe_allow_html=True)
+                        col10.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">🌫️ {current2["AQI"]}</p>', unsafe_allow_html=True)
+                        
+                        # Secondary metrics
+                        col11, col12, col13, col14 = st.columns(4)
+                        col11.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌤️ {current2["Weather"]}</p>', unsafe_allow_html=True)
+                        col11.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">💧 {current2["Humidity"]}</p>', unsafe_allow_html=True)
+                        col12.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🎐 {current2["Wind Speed"]}</p>', unsafe_allow_html=True)
+                        col12.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌧️ {current2["Rain (1h)"]}</p>', unsafe_allow_html=True)
+                        col13.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌅 {current2["Sunrise"]}</p>', unsafe_allow_html=True)
+                        col13.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">🌇 {current2["Sunset"]}</p>', unsafe_allow_html=True)
+                        col14.markdown(f'<p style="font-size:20px; font-weight:600; margin:12px 0;">📊 {current2["Pressure"]}</p>', unsafe_allow_html=True)
+                                   
+                 # Forecast comparison
                 if data1["forecast"] and data2["forecast"]:
                     st.subheader("📈 Forecast Comparison")
                     fig = plot_comparison(data1["forecast"], data2["forecast"], city1, city2)
