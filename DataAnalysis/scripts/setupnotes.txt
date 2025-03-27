@@ -33,7 +33,7 @@ create a dataset metadata json file
     "licenses": [{"name": "CC0-1.0"}]
   }
 kaggle datasets create -p scripts # folder where py files are saved.run at folder above
-kaggle datasets version -p scripts/ -m "Updated logic in weatherk.py" # if you make changes to weatherk.py, just re-run:
+kaggle datasets version -p . -m "Refined logic in weatherk.py" # inside the scripts folder
 
 
 
