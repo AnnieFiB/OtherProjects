@@ -2,7 +2,7 @@
 
 import os
 import requests
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from tabulate import tabulate
 import matplotlib.pyplot as plt
