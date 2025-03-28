@@ -132,3 +132,13 @@ source ~/.bashrc
 
 - **dos2unix postBuild** 
 - **chmod +x postBuild** 
+
+create a dataset metadata json file
+{
+    "title": "Data Script",
+    "id": "busayof/hlprfunct",
+    "licenses": [{"name": "CC0-1.0"}]
+  }
+kaggle datasets create -p scripts # folder where py files are saved.run at folder above
+kaggle datasets version -p . -m "Refined logic in weatherk.py" # inside the scripts folder
+kaggle datasets version -p . -m "Updated dataset: Added new files and refined existing ones"  # located within the scripts folder
