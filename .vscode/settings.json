@@ -1,1 +1,23 @@
-{ "remote.containers.enabled": false }
+{
+    "python.languageServer": "Pylance",
+    "python.defaultInterpreterPath": "myenv/bin/python",
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.analysis.extraPaths": [
+        "DataAnalysis/scripts"
+    ],
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "jupyter.logging.level": "error",
+    "jupyter.askForKernelRestart": false,
+    "jupyter.disableZMQSupport": false,
+    "jupyter.widgetScriptSources": [
+        "jsdelivr",
+        "unpkg",
+        "npm"
+    ],
+    "remote.containers.enabled": false,
+    "jupyter.interactiveWindow.codeLens.enable": true,
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "terminal.integrated.defaultProfile.windows": "Git Bash",
+    "files.autoSave": "onFocusChange"
+}
