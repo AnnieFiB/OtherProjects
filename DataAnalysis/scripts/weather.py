@@ -1,17 +1,25 @@
-# === Complete Weather Comparison Tool ===
+# === Unified Weather Comparison Tool ===
 import os
 import requests
-from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from tabulate import tabulate
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# Load environment variables
-load_dotenv()
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
+# Environment detection and setup
+if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ:
+    # Kaggle environment
+    from kaggle_secrets import UserSecretsClient
+    user_secrets = UserSecretsClient()
+    API_KEY = user_secrets.get_secret("OPENWEATHER_API_KEY")
+else:
+    # Local environment
+    from dotenv import load_dotenv
+    load_dotenv()
+    API_KEY = os.getenv("OPENWEATHER_API_KEY")
+
 if not API_KEY:
-    raise ValueError("Please set OPENWEATHER_API_KEY in .env file")
+    raise ValueError("API key not found. Set OPENWEATHER_API_KEY in .env file or Kaggle secrets")
 
 # API endpoints
 GEO_URL = "http://api.openweathermap.org/geo/1.0/direct"
