@@ -8,6 +8,8 @@ python -m venv myenv  # Create virtual environment
 ls -la venv/bin
 ```
 
+./cleanup.sh
+
 Activate the virtual environment:
 
 ```sh
