@@ -21,6 +21,8 @@ source myenv/bin/activate  # On macOS/Linux
 ```sh
 pip install -r requirements.txt
 pip list  # Verify installed packages
+pip freeze > requirements.txt
+
 ```
 
 ## Creating a Kernel for Your Virtual Environment

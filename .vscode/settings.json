@@ -1,6 +1,6 @@
 {
     "python.languageServer": "Pylance",
-    "python.defaultInterpreterPath": "myenv/bin/python",
+    "python.defaultInterpreterPath": "myenv/bin/python",           // or "myenv\\Scripts\\python.exe"
     "python.envFile": "${workspaceFolder}/.env",
     "python.analysis.extraPaths": [
         "DataAnalysis/scripts"
