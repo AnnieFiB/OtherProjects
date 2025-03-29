@@ -1,3 +1,4 @@
+
 # Setting Up a Python Virtual Environment
 
 ## Creating and Activating a Virtual Environment
@@ -21,9 +22,10 @@ source myenv/bin/activate  # On macOS/Linux
 ```sh
 pip install -r requirements.txt
 pip list  # Verify installed packages
-pip freeze > requirements.txt
-
+pip freeze > requirement1s.txt
+pip install requests python-dotenv
 ```
+to Remove All Installed Packages (Reset Environment): pip freeze | xargs pip uninstall -y
 
 ## Creating a Kernel for Your Virtual Environment
 
