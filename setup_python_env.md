@@ -119,25 +119,8 @@ chmod +x cleanup.sh
 - **Set the Python interpreter** in `.vscode/settings.json`
 - **Document setup steps** in `README.md`
 
-## Binder
-- **touch postBuild** 
-- **I#!/bin/bash
-# Set API keys as environment variables
-echo "export API_KEY_1=your_first_api_key" >> ~/.bashrc
-echo "export API_KEY_2=your_second_api_key" >> ~/.bashrc
-echo "export API_KEY_3=your_third_api_key" >> ~/.bashrc
-
-# Ensure .bashrc is loaded for all login shells (including Jupyter)
-echo "source ~/.bashrc" >> ~/.profile
-echo "source ~/.bashrc" >> ~/.bash_profile
-
-# Reload .bashrc to make sure it's available immediately
-source ~/.bashrc
-
-- **dos2unix postBuild** 
-- **chmod +x postBuild** 
-
-create a dataset metadata json file
+# kaggle
+create a dataset metadata json file for kaggle
 {
     "title": "Data Script",
     "id": "busayof/hlprfunct",
@@ -146,3 +129,5 @@ create a dataset metadata json file
 kaggle datasets create -p scripts # folder where py files are saved.run at folder above
 kaggle datasets version -p . -m "Refined logic in weatherk.py" # inside the scripts folder
 kaggle datasets version -p . -m "Updated dataset: Added new files and refined existing ones"  # located within the scripts folder
+
+## Binder
