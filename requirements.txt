@@ -18,6 +18,7 @@ bleach
 blinker
 bokeh
 cachetools
+catboost 
 certifi
 cffi
 charset-normalizer
@@ -74,6 +75,7 @@ jupyterlab
 kaggle
 kiwisolver
 lxml
+lightgbm
 markdown-it-py
 MarkupSafe
 matplotlib

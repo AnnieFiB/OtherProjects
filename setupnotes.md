@@ -133,10 +133,4 @@ kaggle datasets version -p . -m "Refined logic in weatherk.py" # inside the scri
 kaggle datasets version -p . -m "Updated dataset: Added new files and refined existing ones"  # located within the scripts folder
 
 ## Binder
-https://github.com/AnnieFiB/my_projects
-
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/AnnieFiB/my_projects/main)
-
-
-
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/AnnieFiB/my_projects/main?urlpath=%2Fdoc%2Ftree%2FTelco_customer_churn_prediction)
+https://mybinder.org/v2/gh/AnnieFiB/my-first-binder/HEAD

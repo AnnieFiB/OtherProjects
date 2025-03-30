@@ -137,7 +137,7 @@ def fetch_kaggle_dataset(search_query="human resources"):
     return data
 
 def detect_columns(df):
-    """Detect column types with clear categories"""
+    """Detect column types and return results in a DataFrame."""
     config = {
         'num_cols': [],
         'binary_cols': [],
@@ -153,24 +153,33 @@ def detect_columns(df):
             config['num_cols'].append(col)
         else:
             unique_vals = df[col].nunique()
-            if unique_vals == 1:
-                config['irrelevant_cols'].append(col)
-            elif unique_vals == 2:
+            if unique_vals == 2:
                 config['binary_cols'].append(col)
             elif 3 <= unique_vals <= 15:
                 config['multi_cat_cols'].append(col)
-            else:
+            else:  # Handles both unique_vals == 1 and >15 cases
                 config['irrelevant_cols'].append(col)
 
-    print(" Detected columns:")
-    print(f"- Dates: {config['date_cols']}")
-    print(f"- Numerical: {config['num_cols']}")
-    print(f"- Binary: {config['binary_cols']}")
-    print(f"- Multi-category: {config['multi_cat_cols']}")
-    print(f"- Irrelevant: {config['irrelevant_cols']}")
+    # Convert to DataFrame
+    result_df = pd.DataFrame({
+        "Category": ["Dates", "Numerical", "Binary", "Multi-Category", "Irrelevant"],
+        "Columns": [
+            config['date_cols'],
+            config['num_cols'],
+            config['binary_cols'],
+            config['multi_cat_cols'],
+            config['irrelevant_cols']
+        ],
+        "Count": [
+            len(config['date_cols']),
+            len(config['num_cols']),
+            len(config['binary_cols']),
+            len(config['multi_cat_cols']),
+            len(config['irrelevant_cols'])
+        ]
+    })
     
-    return config
-
+    return result_df
 
 
 def clean_data(df, config, missing_strategy='fill'):
@@ -216,7 +225,6 @@ def clean_data(df, config, missing_strategy='fill'):
    
     return df
 
-import os
 
 def generate_autoviz_html_report(folder_name="reports_html", output_filename="AutoViz_Report.html"):
     folder_path = os.path.abspath(folder_name)

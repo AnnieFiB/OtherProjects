@@ -36,22 +36,23 @@ def setup_database(db_name):
     Parameters:
     db_name (str): The name of the SQLite database file (e.g., 'students_mental_health.db').
     """
-    global engine, Session  # Use global variables for engine and Session
+    global engine, Session
 
     # Construct the database path
     DATABASE_PATH = f'sqlite:///{db_name}'
-    db_file = db_name  # SQLite database file path
+    db_file = db_name
 
     # Check if the database file exists
     if os.path.exists(db_file):
         print(f"⚠ Database '{db_file}' already exists. Dropping it...")
         drop_database(db_name)  # Drop the existing database
 
-    # Create a new database
+    # Re-initialize the engine and Session after dropping the old database
     engine = create_engine(DATABASE_PATH, echo=False)
-    Base.metadata.create_all(engine)  # Create the table in the database
-    Session = sessionmaker(bind=engine)  # Create a session factory
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
     print(f"✅ Database '{db_name}' created successfully.")
+
 
 
 def setup_and_insert_data(df, db_name):
@@ -175,14 +176,15 @@ def drop_database(db_name):
     Parameters:
     db_name (str): The name of the SQLite database file (e.g., 'students_mental_health.db').
     """
-    global engine, Session  # Use global variables for engine and Session
+    global engine, Session
 
-    # Close all sessions and dispose of the engine
-    Session.close_all()  # Close all sessions
-    engine.dispose()  # Dispose of the engine to close all connections
-    print("✅ All database connections and sessions closed.")
+    # Close sessions and dispose engine only if they exist
+    if Session:
+        Session.close_all()
+    if engine:
+        engine.dispose()
 
-    # Check if the file exists
+    # Delete the database file
     if os.path.exists(db_name):
         try:
             os.remove(db_name)

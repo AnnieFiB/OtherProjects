@@ -8,7 +8,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-from xgboost import XGBClassifier
+#from xgboost import XGBClassifier
+#from lightgbm import LGBMClassifier
+#from sklearn.ensemble import CatBoostClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.dummy import DummyClassifier
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -190,17 +193,21 @@ def balance_classes_smote(X, y, random_state=42):
     return X_res, y_res
 
 
-def train_and_evaluate_models(X, y, cv_splits=5):
+def train_and_evaluate_models(X, y, cv_splits=10):
     """
     Train models using cross validation scores to avoid overfitting
     """    
     models = {
         "Dummy": DummyClassifier(strategy="most_frequent"),
-        "Logistic Regression": LogisticRegression(max_iter=1000),
-        "Random Forest": RandomForestClassifier(),
-        "KNN": KNeighborsClassifier(),
-        "SVM": SVC(probability=True),
-      }
+        "Logistic Regression": LogisticRegression(max_iter=1000, class_weight="balanced"),
+        "Random Forest": RandomForestClassifier(class_weight="balanced"),
+        #"KNN": KNeighborsClassifier(),
+        "SVM": SVC(probability=True, class_weight="balanced"),
+       # "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric="logloss", scale_pos_weight=5),
+       # "CatBoost": CatBoostClassifier(verbose=0, class_weights=[1, 5]),  # Adjust weight if needed,
+        "LightGBM": LGBMClassifier(class_weight="balanced"),
+        "Gradient Boosting": GradientBoostingClassifier()
+            }   
 
     results = {}
     trained_models = {}
