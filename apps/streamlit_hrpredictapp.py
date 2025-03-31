@@ -24,6 +24,9 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_selection import mutual_info_classif
 from hrattrition import *
 
+# Step 1: Load API key from .env file
+API_KEY = st.secrets.get("OPENWEATHER_API_KEY")
+
 # Constants
 TARGET = 'Attrition'
 targets = 'attrition'
@@ -59,8 +62,18 @@ def setup_kaggle():
 
 @st.cache_data(ttl=3600)
 def load_data():
-    """Robust data loader with multiple fallbacks"""
+    """Robust data loader with multiple fallbacks with Streamlit Secrets support"""
     try:
+        # Check for Kaggle credentials in Streamlit secrets
+        if hasattr(st.secrets, "kaggle"):
+            os.makedirs(os.path.expanduser("~/.kaggle"), exist_ok=True)
+            with open(os.path.expanduser("~/.kaggle/kaggle.json"), "w") as f:
+                json.dump({
+                    "username": st.secrets.kaggle.username,
+                    "key": st.secrets.kaggle.key
+                }, f)
+            os.chmod(os.path.expanduser("~/.kaggle/kaggle.json"), 0o600)
+        
         if setup_kaggle():
             api = KaggleApi()
             api.authenticate()
@@ -73,19 +86,26 @@ def load_data():
                     return df
                 raise Exception("File not found after download")
     except Exception as e:
-        st.warning(f"Kaggle download failed: {str(e)}")
+        if "Forbidden" in str(e):
+            st.warning("Kaggle authentication failed - check your secrets configuration")
+        else:
+            st.warning(f"Kaggle download failed: {str(e)}")
     
     # GitHub fallback
     with st.spinner("🔄 Attempting GitHub download..."):
         try:
-            response = requests.get(GITHUB_URL)
+            headers = {}
+            if hasattr(st.secrets, "github"):
+                headers = {"Authorization": f"token {st.secrets.github.token}"}
+            
+            response = requests.get(GITHUB_URL, headers=headers)
             response.raise_for_status()
             df = pd.read_csv(StringIO(response.text))
             st.session_state.raw_data = df.copy()
             st.success("✅ Dataset loaded from GitHub")
             return df
-        except:
-            st.error("⚠️ GitHub download failed")
+        except Exception as e:
+            st.error(f"GitHub download failed: {str(e)}")
     
     # Local fallback
     if os.path.exists("local_attrition_data.csv"):
@@ -237,7 +257,7 @@ def main():
                 These correlations support prioritizing compensation fairness, job engagement, and early employee experience in attrition mitigation strategies.
                 
                 """)
-                
+
         if 'cleaned_data' in st.session_state:
             cleaned_data = st.session_state.cleaned_data
             num_cols = cleaned_data.select_dtypes(include=np.number).columns.tolist()
