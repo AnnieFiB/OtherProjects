@@ -1,0 +1,193 @@
+2025-03-31 16:29:19,142 - WARNING - Tesseract OCR not installed. CAPTCHA solving will be manual only.
+2025-03-31 16:29:19,142 - WARNING - Install Tesseract for automatic CAPTCHA solving:
+2025-03-31 16:29:19,142 - WARNING - Windows: https://github.com/UB-Mannheim/tesseract/wiki
+2025-03-31 16:29:19,143 - WARNING - Mac: brew install tesseract
+2025-03-31 16:29:19,143 - WARNING - Linux: sudo apt install tesseract-ocr
+2025-03-31 16:29:21,074 - INFO - Processing 1/62: https://www.adaraparis.com
+2025-03-31 16:29:25,223 - INFO - Using requests for https://www.adaraparis.com
+2025-03-31 16:29:26,132 - WARNING - CAPTCHA detected on https://www.adaraparis.com - requires Selenium
+2025-03-31 16:29:26,133 - INFO - Processing 2/62: https://amoracosmetics.mx
+2025-03-31 16:29:29,643 - INFO - Using requests for https://amoracosmetics.mx
+2025-03-31 16:29:29,661 - ERROR - Requests failed for https://amoracosmetics.mx: HTTPSConnectionPool(host='amoracosmetics.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DAE90>: Failed to resolve 'amoracosmetics.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:29:29,662 - INFO - Processing 3/62: https://www.avon.mx
+2025-03-31 16:29:32,395 - INFO - Using requests for https://www.avon.mx
+2025-03-31 16:29:33,058 - INFO - Scraped: None
+2025-03-31 16:29:33,059 - INFO - Processing 4/62: https://www.bamboolife.com.mx
+2025-03-31 16:29:37,950 - INFO - Using requests for https://www.bamboolife.com.mx
+2025-03-31 16:29:37,970 - ERROR - Requests failed for https://www.bamboolife.com.mx: HTTPSConnectionPool(host='www.bamboolife.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DB110>: Failed to resolve 'www.bamboolife.com.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:29:37,971 - INFO - Processing 5/62: https://beautika.mx
+2025-03-31 16:29:40,438 - INFO - Using requests for https://beautika.mx
+2025-03-31 16:29:40,458 - ERROR - Requests failed for https://beautika.mx: HTTPSConnectionPool(host='beautika.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DB750>: Failed to resolve 'beautika.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:29:40,459 - INFO - Processing 6/62: https://beautiquebeautystore.com
+2025-03-31 16:29:44,893 - INFO - Using requests for https://beautiquebeautystore.com
+2025-03-31 16:29:44,929 - ERROR - Requests failed for https://beautiquebeautystore.com: HTTPSConnectionPool(host='beautiquebeautystore.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DBC50>: Failed to resolve 'beautiquebeautystore.com' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:29:44,948 - INFO - Processing 7/62: https://www.bioderma.mx
+2025-03-31 16:29:48,113 - INFO - Using requests for https://www.bioderma.mx
+2025-03-31 16:29:49,347 - WARNING - CAPTCHA detected on https://www.bioderma.mx - requires Selenium
+2025-03-31 16:29:49,348 - INFO - Processing 8/62: https://www.bissu.com/tiendas
+2025-03-31 16:29:53,816 - INFO - Using requests for https://www.bissu.com/tiendas
+2025-03-31 16:29:54,310 - WARNING - CAPTCHA detected on https://www.bissu.com/tiendas - requires Selenium
+2025-03-31 16:29:54,311 - INFO - Processing 9/62: https://www.bissu.com
+2025-03-31 16:29:56,538 - INFO - Using requests for https://www.bissu.com
+2025-03-31 16:29:56,859 - WARNING - CAPTCHA detected on https://www.bissu.com - requires Selenium
+2025-03-31 16:29:56,859 - INFO - Processing 10/62: https://www.botanicus.com.mx
+2025-03-31 16:29:59,558 - INFO - Using requests for https://www.botanicus.com.mx
+2025-03-31 16:30:11,008 - WARNING - CAPTCHA detected on https://www.botanicus.com.mx - requires Selenium
+2025-03-31 16:30:11,009 - INFO - Processing 11/62: https://centroderma.com
+2025-03-31 16:30:15,123 - INFO - Using requests for https://centroderma.com
+2025-03-31 16:30:16,179 - INFO - Scraped: None
+2025-03-31 16:30:16,184 - INFO - Processing 12/62: https://mexicocity.shopdutyfree.com/en/47/beauty
+2025-03-31 16:30:18,240 - INFO - Using requests for https://mexicocity.shopdutyfree.com/en/47/beauty
+2025-03-31 16:30:18,379 - ERROR - Requests failed for https://mexicocity.shopdutyfree.com/en/47/beauty: 410 Client Error: Gone for url: https://mexicocity.shopdutyfree.com/en/47/beauty
+2025-03-31 16:30:18,380 - INFO - Processing 13/62: https://www.elpalaciodehierro.com
+2025-03-31 16:30:21,523 - INFO - Using Selenium for https://www.elpalaciodehierro.com
+2025-03-31 16:30:29,975 - INFO - Scraped: None
+2025-03-31 16:30:29,975 - INFO - Processing 14/62: https://ereperez.mx
+2025-03-31 16:30:33,465 - INFO - Using requests for https://ereperez.mx
+2025-03-31 16:30:33,861 - WARNING - CAPTCHA detected on https://ereperez.mx - requires Selenium
+2025-03-31 16:30:33,862 - INFO - Processing 15/62: https://www.etude.com/mx
+2025-03-31 16:30:36,435 - INFO - Using requests for https://www.etude.com/mx
+2025-03-31 16:30:37,135 - ERROR - Requests failed for https://www.etude.com/mx: 404 Client Error: Not Found for url: https://www.etude.com/mx
+2025-03-31 16:30:37,136 - INFO - Processing 16/62: https://www.benavides.com.mx
+2025-03-31 16:30:40,072 - INFO - Using requests for https://www.benavides.com.mx
+2025-03-31 16:30:40,498 - WARNING - CAPTCHA detected on https://www.benavides.com.mx - requires Selenium
+2025-03-31 16:30:40,502 - INFO - Processing 17/62: https://www.fahorro.com
+2025-03-31 16:30:42,659 - INFO - Using requests for https://www.fahorro.com
+2025-03-31 16:30:43,008 - ERROR - Requests failed for https://www.fahorro.com: 403 Client Error: Forbidden for url: https://www.fahorro.com/
+2025-03-31 16:30:43,009 - INFO - Processing 18/62: https://www.farmaciasanpablo.com.mx
+2025-03-31 16:30:45,531 - INFO - Using requests for https://www.farmaciasanpablo.com.mx
+2025-03-31 16:30:45,745 - ERROR - Requests failed for https://www.farmaciasanpablo.com.mx: 403 Client Error: Forbidden for url: https://www.farmaciasanpablo.com.mx/
+2025-03-31 16:30:45,745 - INFO - Processing 19/62: https://www.farmaciasdesimilares.com.mx
+2025-03-31 16:30:49,878 - INFO - Using requests for https://www.farmaciasdesimilares.com.mx
+2025-03-31 16:30:50,657 - WARNING - CAPTCHA detected on https://www.farmaciasdesimilares.com.mx - requires Selenium
+2025-03-31 16:30:50,659 - INFO - Processing 20/62: https://friddadorsch.com.mx
+2025-03-31 16:30:52,721 - INFO - Using requests for https://friddadorsch.com.mx
+2025-03-31 16:30:53,033 - ERROR - Requests failed for https://friddadorsch.com.mx: HTTPSConnectionPool(host='friddadorsch.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DAFD0>: Failed to resolve 'friddadorsch.com.mx' ([Errno 11002] getaddrinfo failed)"))
+2025-03-31 16:30:53,039 - INFO - Processing 21/62: https://greenrepublic.mx/
+2025-03-31 16:30:56,864 - INFO - Using requests for https://greenrepublic.mx/
+2025-03-31 16:30:57,918 - WARNING - CAPTCHA detected on https://greenrepublic.mx/ - requires Selenium
+2025-03-31 16:30:57,924 - INFO - Processing 22/62: https://greenspa.com.mx
+2025-03-31 16:31:00,051 - INFO - Using requests for https://greenspa.com.mx
+2025-03-31 16:31:09,366 - ERROR - Requests failed for https://greenspa.com.mx: HTTPSConnectionPool(host='greenspa.com.mx', port=443): Max retries exceeded with url: / (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x000001DCD34DB9D0>: Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it'))
+2025-03-31 16:31:09,368 - INFO - Processing 23/62: https://www.innisfree.com/mx
+2025-03-31 16:31:12,270 - INFO - Using requests for https://www.innisfree.com/mx
+2025-03-31 16:31:14,793 - ERROR - Requests failed for https://www.innisfree.com/mx: 404 Client Error: Not Found for url: https://www.innisfree.com:443/kr/ko/mx
+2025-03-31 16:31:14,794 - INFO - Processing 24/62: https://www.isdin.com/mx
+2025-03-31 16:31:17,856 - INFO - Using requests for https://www.isdin.com/mx
+2025-03-31 16:31:19,717 - WARNING - CAPTCHA detected on https://www.isdin.com/mx - requires Selenium
+2025-03-31 16:31:19,718 - INFO - Processing 25/62: https://www.kiehls.com.mx
+2025-03-31 16:31:24,043 - INFO - Using requests for https://www.kiehls.com.mx
+2025-03-31 16:31:24,247 - ERROR - Requests failed for https://www.kiehls.com.mx: 403 Client Error: Forbidden for url: https://www.kiehls.com.mx/
+2025-03-31 16:31:24,247 - INFO - Processing 26/62: https://mx.loccitane.com
+2025-03-31 16:31:26,445 - INFO - Using requests for https://mx.loccitane.com
+2025-03-31 16:31:27,039 - WARNING - CAPTCHA detected on https://mx.loccitane.com - requires Selenium
+2025-03-31 16:31:27,045 - INFO - Processing 27/62: https://www.laroche-posay.com.mx
+2025-03-31 16:31:30,210 - INFO - Using requests for https://www.laroche-posay.com.mx
+2025-03-31 16:31:30,403 - WARNING - CAPTCHA detected on https://www.laroche-posay.com.mx - requires Selenium
+2025-03-31 16:31:30,404 - INFO - Processing 28/62: https://www.liverpool.com.mx
+2025-03-31 16:31:32,456 - INFO - Using Selenium for https://www.liverpool.com.mx
+2025-03-31 16:31:50,318 - INFO - Scraped: None
+2025-03-31 16:31:50,319 - INFO - Processing 29/62: https://www.lumen.com.mx
+2025-03-31 16:31:54,611 - INFO - Using requests for https://www.lumen.com.mx
+2025-03-31 16:31:56,237 - WARNING - CAPTCHA detected on https://www.lumen.com.mx - requires Selenium
+2025-03-31 16:31:56,238 - INFO - Processing 30/62: https://www.lurecosmetics.com
+2025-03-31 16:31:59,891 - INFO - Using requests for https://www.lurecosmetics.com
+2025-03-31 16:32:00,658 - ERROR - Requests failed for https://www.lurecosmetics.com: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-03-31 16:32:00,658 - INFO - Processing 31/62: https://www.maccosmetics.com.mx
+2025-03-31 16:32:05,114 - INFO - Using Selenium for https://www.maccosmetics.com.mx
+2025-03-31 16:32:28,534 - INFO - Scraped: None
+2025-03-31 16:32:28,539 - INFO - Processing 32/62: https://makispa.com
+2025-03-31 16:32:32,201 - INFO - Using requests for https://makispa.com
+2025-03-31 16:32:32,245 - ERROR - Requests failed for https://makispa.com: HTTPSConnectionPool(host='makispa.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DBB10>: Failed to resolve 'makispa.com' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:32:32,246 - INFO - Processing 33/62: https://makisupa.mx
+2025-03-31 16:32:34,924 - INFO - Using requests for https://makisupa.mx
+2025-03-31 16:32:34,949 - ERROR - Requests failed for https://makisupa.mx: HTTPSConnectionPool(host='makisupa.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD3569590>: Failed to resolve 'makisupa.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:32:34,950 - INFO - Processing 34/62: https://www.mercadolibre.com.mx
+2025-03-31 16:32:37,758 - INFO - Using Selenium for https://www.mercadolibre.com.mx
+2025-03-31 16:32:42,285 - INFO - Scraped: None
+2025-03-31 16:32:42,286 - INFO - Processing 35/62: https://momijibeauty.com
+2025-03-31 16:32:45,156 - INFO - Using requests for https://momijibeauty.com
+2025-03-31 16:32:45,564 - WARNING - CAPTCHA detected on https://momijibeauty.com - requires Selenium
+2025-03-31 16:32:45,565 - INFO - Processing 36/62: https://www.natura.com.mx
+2025-03-31 16:32:48,589 - INFO - Using requests for https://www.natura.com.mx
+2025-03-31 16:32:49,094 - ERROR - Requests failed for https://www.natura.com.mx: 403 Client Error: Forbidden for url: https://www.natura.com.mx/
+2025-03-31 16:32:49,098 - INFO - Processing 37/62: https://www.naturerepublic.com.mx
+2025-03-31 16:32:52,365 - INFO - Using requests for https://www.naturerepublic.com.mx
+2025-03-31 16:32:54,436 - ERROR - Requests failed for https://www.naturerepublic.com.mx: HTTPSConnectionPool(host='www.naturerepublic.com.mx', port=443): Max retries exceeded with url: / (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x000001DCD34DBC50>: Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it'))
+2025-03-31 16:32:54,439 - INFO - Processing 38/62: https://nopalera.co
+2025-03-31 16:32:59,247 - INFO - Using requests for https://nopalera.co
+2025-03-31 16:32:59,751 - WARNING - CAPTCHA detected on https://nopalera.co - requires Selenium
+2025-03-31 16:32:59,752 - INFO - Processing 39/62: https://mx.oriflame.com
+2025-03-31 16:33:04,128 - INFO - Using requests for https://mx.oriflame.com
+2025-03-31 16:33:04,962 - INFO - Scraped: None
+2025-03-31 16:33:04,963 - INFO - Processing 40/62: https://pinkup.com.mx
+2025-03-31 16:33:09,448 - INFO - Using requests for https://pinkup.com.mx
+2025-03-31 16:33:10,574 - ERROR - Requests failed for https://pinkup.com.mx: HTTPSConnectionPool(host='pinkup.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DAC10>: Failed to resolve 'pinkup.com.mx' ([Errno 11002] getaddrinfo failed)"))
+2025-03-31 16:33:10,575 - INFO - Processing 41/62: https://renova.mx
+2025-03-31 16:33:13,015 - INFO - Using requests for https://renova.mx
+2025-03-31 16:33:13,255 - ERROR - Requests failed for https://renova.mx: HTTPSConnectionPool(host='renova.mx', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLError(1, '[SSL: TLSV1_UNRECOGNIZED_NAME] tlsv1 unrecognized name (_ssl.c:1028)')))
+2025-03-31 16:33:13,260 - INFO - Processing 42/62: https://www.sanborns.com.mx
+2025-03-31 16:33:16,343 - INFO - Using Selenium for https://www.sanborns.com.mx
+2025-03-31 16:33:38,904 - INFO - Scraped: None
+2025-03-31 16:33:38,904 - INFO - Processing 43/62: https://www.sesderma.mx
+2025-03-31 16:33:41,655 - INFO - Using requests for https://www.sesderma.mx
+2025-03-31 16:33:42,947 - WARNING - CAPTCHA detected on https://www.sesderma.mx - requires Selenium
+2025-03-31 16:33:42,950 - INFO - Processing 44/62: https://www.shopmissa.com
+2025-03-31 16:33:47,378 - INFO - Using requests for https://www.shopmissa.com
+2025-03-31 16:33:48,098 - WARNING - CAPTCHA detected on https://www.shopmissa.com - requires Selenium
+2025-03-31 16:33:48,099 - INFO - Processing 45/62: https://simiderma.com.mx
+2025-03-31 16:33:51,531 - INFO - Using requests for https://simiderma.com.mx
+2025-03-31 16:33:51,558 - ERROR - Requests failed for https://simiderma.com.mx: HTTPSConnectionPool(host='simiderma.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DBED0>: Failed to resolve 'simiderma.com.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:33:51,560 - INFO - Processing 46/62: https://www.sisley-paris.com/mx
+2025-03-31 16:33:55,647 - INFO - Using requests for https://www.sisley-paris.com/mx
+2025-03-31 16:33:56,316 - WARNING - CAPTCHA detected on https://www.sisley-paris.com/mx - requires Selenium
+2025-03-31 16:33:56,325 - INFO - Processing 47/62: https://spaexcellence.mx
+2025-03-31 16:34:01,061 - INFO - Using requests for https://spaexcellence.mx
+2025-03-31 16:34:01,082 - ERROR - Requests failed for https://spaexcellence.mx: HTTPSConnectionPool(host='spaexcellence.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DA350>: Failed to resolve 'spaexcellence.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:34:01,083 - INFO - Processing 48/62: https://thebeautyeffect.com
+2025-03-31 16:34:03,445 - INFO - Using requests for https://thebeautyeffect.com
+2025-03-31 16:34:04,426 - INFO - Scraped: None
+2025-03-31 16:34:04,427 - INFO - Processing 49/62: https://www.thebodyshop.com.mx
+2025-03-31 16:34:07,428 - INFO - Using requests for https://www.thebodyshop.com.mx
+2025-03-31 16:34:07,457 - ERROR - Requests failed for https://www.thebodyshop.com.mx: HTTPSConnectionPool(host='www.thebodyshop.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DA990>: Failed to resolve 'www.thebodyshop.com.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:34:07,462 - INFO - Processing 50/62: https://tonymolymexico.com.mx
+2025-03-31 16:34:11,100 - INFO - Using requests for https://tonymolymexico.com.mx
+2025-03-31 16:34:11,121 - ERROR - Requests failed for https://tonymolymexico.com.mx: HTTPSConnectionPool(host='tonymolymexico.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DA350>: Failed to resolve 'tonymolymexico.com.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:34:11,124 - INFO - Processing 51/62: https://www.toofaced.com.mx
+2025-03-31 16:34:15,687 - INFO - Using requests for https://www.toofaced.com.mx
+2025-03-31 16:34:15,712 - ERROR - Requests failed for https://www.toofaced.com.mx: HTTPSConnectionPool(host='www.toofaced.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DAE90>: Failed to resolve 'www.toofaced.com.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:34:15,717 - INFO - Processing 52/62: https://www.ubuy.com.mx
+2025-03-31 16:34:19,586 - INFO - Using requests for https://www.ubuy.com.mx
+2025-03-31 16:34:21,235 - INFO - Scraped: INTERNATIONAL ONLINE SHOPPING MADE EASY AT UBUY Mexico
+2025-03-31 16:34:21,236 - INFO - Processing 53/62: https://www.ulta.com
+2025-03-31 16:34:25,566 - INFO - Using Selenium for https://www.ulta.com
+2025-03-31 16:34:43,842 - INFO - Scraped: None
+2025-03-31 16:34:43,842 - INFO - Processing 54/62: https://www.urbandecay.com.mx
+2025-03-31 16:34:47,528 - INFO - Using requests for https://www.urbandecay.com.mx
+2025-03-31 16:34:47,615 - ERROR - Requests failed for https://www.urbandecay.com.mx: HTTPSConnectionPool(host='www.urbandecay.com.mx', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLError(1, '[SSL: TLSV1_UNRECOGNIZED_NAME] tlsv1 unrecognized name (_ssl.c:1028)')))
+2025-03-31 16:34:47,616 - INFO - Processing 55/62: https://www.vichy.com.mx
+2025-03-31 16:34:49,754 - INFO - Using requests for https://www.vichy.com.mx
+2025-03-31 16:34:50,194 - WARNING - CAPTCHA detected on https://www.vichy.com.mx - requires Selenium
+2025-03-31 16:34:50,195 - INFO - Processing 56/62: https://www.vickyform.com.mx
+2025-03-31 16:34:54,583 - INFO - Using requests for https://www.vickyform.com.mx
+2025-03-31 16:34:54,613 - ERROR - Requests failed for https://www.vickyform.com.mx: HTTPSConnectionPool(host='www.vickyform.com.mx', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DA850>: Failed to resolve 'www.vickyform.com.mx' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:34:54,623 - INFO - Processing 57/62: https://www.walmart.com.mx
+2025-03-31 16:34:57,765 - INFO - Using Selenium for https://www.walmart.com.mx
+2025-03-31 16:35:03,985 - INFO - Scraped: None
+2025-03-31 16:35:03,985 - INFO - Processing 58/62: https://www.xabone.com/collections/maquillaje-organico-mexico
+2025-03-31 16:35:07,998 - INFO - Using requests for https://www.xabone.com/collections/maquillaje-organico-mexico
+2025-03-31 16:35:08,733 - WARNING - CAPTCHA detected on https://www.xabone.com/collections/maquillaje-organico-mexico - requires Selenium
+2025-03-31 16:35:08,734 - INFO - Processing 59/62: https://www.bailandojuntos.com
+2025-03-31 16:35:11,323 - INFO - Using requests for https://www.bailandojuntos.com
+2025-03-31 16:35:11,362 - ERROR - Requests failed for https://www.bailandojuntos.com: HTTPSConnectionPool(host='www.bailandojuntos.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DCD34DA850>: Failed to resolve 'www.bailandojuntos.com' ([Errno 11001] getaddrinfo failed)"))
+2025-03-31 16:35:11,363 - INFO - Processing 60/62: https://foiscosmetix.com.mx/collections/all
+2025-03-31 16:35:15,595 - INFO - Using requests for https://foiscosmetix.com.mx/collections/all
+2025-03-31 16:35:15,809 - WARNING - CAPTCHA detected on https://foiscosmetix.com.mx/collections/all - requires Selenium
+2025-03-31 16:35:15,810 - INFO - Processing 61/62: https://www.sallymexico.com
+2025-03-31 16:35:18,757 - INFO - Using requests for https://www.sallymexico.com
+2025-03-31 16:35:19,043 - WARNING - CAPTCHA detected on https://www.sallymexico.com - requires Selenium
+2025-03-31 16:35:19,049 - INFO - Processing 62/62: https://www.sephora.com.mx
+2025-03-31 16:35:24,036 - INFO - Using Selenium for https://www.sephora.com.mx
+2025-03-31 16:35:39,585 - WARNING - CAPTCHA detected on https://www.sephora.com.mx, attempting to solve...
+2025-03-31 16:35:40,925 - INFO - Scraped: None
+2025-03-31 16:35:46,426 - INFO - Scraping completed. Results: 13 successful, 49 failed.
