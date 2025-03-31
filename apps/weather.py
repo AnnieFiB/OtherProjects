@@ -1,31 +1,15 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 import requests
 from datetime import datetime, timedelta
 from collections import Counter
 import matplotlib.pyplot as plt
 import pandas as pd
+import streamlit as st
 
 # Step 1: Load API key from .env file
-# Load from .env first
-load_dotenv()
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
-
-# Fallback to Streamlit Secrets if available
-if not API_KEY:
-    try:
-        import streamlit as st
-        API_KEY = st.secrets.get("OPENWEATHER_API_KEY")
-    except:
-        pass  # Not running in Streamlit environment
-
-if not API_KEY:
-    raise ValueError(
-        "Please set OPENWEATHER_API_KEY in either:\n"
-        "1. .env file (local development)\n"
-        "2. Streamlit Secrets (deployed apps)"
-    )
+API_KEY = st.secrets.get("OPENWEATHER_API_KEY")
 
 # API endpoints
 GEO_URL = "http://api.openweathermap.org/geo/1.0/direct"
