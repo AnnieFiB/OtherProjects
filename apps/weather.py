@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 import requests
 from datetime import datetime, timedelta
 from collections import Counter
@@ -9,8 +9,8 @@ import pandas as pd
 
 # Step 1: Load API key from .env file
 # Load from .env first
-load_dotenv()
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
+#load_dotenv()
+API_KEY = st.secrets["OPENWEATHER_API_KEY"]
 
 # Fallback to Streamlit Secrets if available
 if not API_KEY:
