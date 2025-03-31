@@ -1,99 +1,83 @@
 
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.stattools import adfuller
-import itertools
-import warnings
+import arima_forecasting_utils as afu
 
-warnings.filterwarnings("ignore")
+st.set_page_config(page_title="ARIMA Forecast App", layout="wide")
 
-def load_data(stock_code, period="10y"):
-    stock = yf.Ticker(stock_code)
-    df = stock.history(period=period)
-    df = df[['Close']].rename(columns={'Close': 'close'})
-    df.index.name = 'date'
-    return df
+st.title("📈 ARIMA Stock Forecasting App")
+st.markdown("Compare and forecast up to 4 stock tickers using ARIMA models.")
 
-def preprocess_data(df):
-    df_week = df.resample('W').mean()
-    df_week['weekly_ret'] = np.log(df_week['close']).diff()
-    df_week.dropna(inplace=True)
-    return df_week
+query = st.text_input("Enter stock tickers or company names (comma-separated)" )
+tickers = [afu.resolve_ticker(q.strip()) for q in query.split(",") if q.strip()]
+tickers = tickers[:4]
 
-def test_stationarity(series):
-    result = adfuller(series)
-    return result[1] < 0.05
+years = st.number_input("Forecast years", min_value=1, value=3)
+fast_mode = st.checkbox("🚀 Enable Fast Mode (Limit forecast to 1 year)", value=True)
+forecast_years = 1 if fast_mode else years
 
-def make_stationary(series):
-    d = 0
-    while not test_stationarity(series) and d < 3:
-        series = series.diff().dropna()
-        d += 1
-    return series, d
+run = st.button("Run Forecast")
 
-def find_best_arima(series, d, max_p=3, max_q=3):
-    best_aic = float("inf")
-    best_order = None
-    for p, q in itertools.product(range(max_p+1), range(max_q+1)):
-        try:
-            model = ARIMA(series, order=(p, d, q)).fit()
-            if model.aic < best_aic:
-                best_aic = model.aic
-                best_order = (p, d, q)
-        except:
-            continue
-    return best_order
+if run and tickers:
+    st.subheader("🔍 1. Loading Raw Stock Data from Yahoo Finance")
+    display_data, raw_data = afu.load_all_data(tickers)
+    for t in tickers:
+        df_sample = display_data[t].copy()
+        df_sample["ticker"] = t
+        st.write(f"**Raw data for `{t}`**")
+        st.dataframe(df_sample.head())
 
-def forecast_prices(df_week, years, stock_code):
-    series = df_week['weekly_ret']
-    stationary_series, d = make_stationary(series)
-    best_order = find_best_arima(series, d)
-    model = ARIMA(series, order=best_order).fit()
-    steps = years * 52
-    forecast = model.forecast(steps=steps)
-    last_price = df_week['close'].iloc[-1]
-    forecast_price = last_price * np.exp(np.cumsum(forecast))
-    forecast_index = pd.date_range(df_week.index[-1] + pd.Timedelta(weeks=1), periods=steps, freq='W')
-    forecast_df = pd.DataFrame({'forecast': forecast_price}, index=forecast_index)
-    return forecast_df
+    st.subheader("⚙️ 2. Visualising Logged Weekly Returns")
+    _, weekly_raw = afu.preprocess_all_data(raw_data)
+    for t in tickers:
+        st.write(f"**Weekly Returns for `{t}`**")
+        weekly_ret_series = weekly_raw[t]["weekly_ret"]
+        fig, ax = plt.subplots()
+        ax.plot(weekly_ret_series.index, weekly_ret_series, label=f"{t} Weekly Returns")
+        ax.set_title(f"{t} - Weekly Returns")
+        ax.set_ylabel("Return")
+        ax.grid(True)
+        st.pyplot(fig)
 
-def main():
-    st.title("📈 Multi-Stock ARIMA Forecasting App")
-    
-    stock_input = st.text_input("Enter stock codes (comma-separated, e.g., AAPL,MSFT,GOOGL):", "AAPL,MSFT")
-    period = st.selectbox("Select historical data period:", ["5y", "10y", "max"], index=1)
-    years = st.slider("Select number of years to forecast:", 1, 5, 2)
+    st.subheader("📉 3. Making Data Stationary if Needed")
+    stationary_series, diff_orders = afu.make_all_stationary_auto({k: v["weekly_ret"] for k, v in weekly_raw.items()})
+    for t in tickers:
+        d = diff_orders.get(t, 0)
+        st.write(f"`{t}` → Final differencing applied: d = {d}")
 
-    if st.button("Run Forecast"):
-        stock_codes = [s.strip().upper() for s in stock_input.split(",")]
-        forecast_results = {}
-        
-        plt.figure(figsize=(14, 7))
-        for stock_code in stock_codes:
-            try:
-                df = load_data(stock_code, period)
-                df_week = preprocess_data(df)
-                forecast_df = forecast_prices(df_week, years, stock_code)
+    st.subheader("📊 4. Plotting ACF/PACF Plots for Initial Observation")
+    for t in tickers:
+        st.write(f"**ACF/PACF for `{t}`**")
+        afu.plot_all_acf_pacf({t: stationary_series[t]})
 
-                # Plot historical and forecasted prices
-                plt.plot(df_week['close'], label=f'{stock_code} (History)')
-                plt.plot(forecast_df['forecast'], linestyle='--', label=f'{stock_code} (Forecast)')
+    st.subheader("🤖 5. Suggesting ARIMA Parameters")
+    suggestions = afu.suggest_arima_params(stationary_series, diff_orders)
+    st.json(suggestions)
 
-                forecast_results[stock_code] = forecast_df
+    st.subheader("🧠 6. Selecting Best ARIMA Model for Forecasting")
+    best_orders = {}
+    for t in tickers:
+        best_order = afu.find_best_arima(stationary_series[t], **suggestions[t], ticker=t)
+        best_orders[t] = best_order
+        st.write(f"{t} → Best ARIMA Order: {best_order}")
 
-            except Exception as e:
-                st.error(f"Error processing {stock_code}: {e}")
-        
-        plt.title("Stock Price Forecast (Historical + Future)")
-        plt.xlabel("Date")
-        plt.ylabel("Price")
-        plt.legend()
-        plt.grid(True)
-        st.pyplot(plt)
+    st.subheader("✅ 7. Running Residual Diagnostics for Model Ealuation")
+    res_df = afu.evaluate_arima_residuals({k: v["weekly_ret"] for k, v in weekly_raw.items()}, best_orders, plot=True)
+    st.dataframe(res_df)
 
-if __name__ == "__main__":
-    main()
+    st.subheader("📈 8. Forecasting & Visualising Forecasted Stock Prices")
+    forecast_df = afu.forecast_prices(
+        {k: v["weekly_ret"] for k, v in weekly_raw.items()},
+        weekly_raw,
+        best_orders,
+        forecast_years
+    )
+    st.dataframe(forecast_df)
+
+    st.subheader("📉 9. Visualising Respective Ticker's Rolling Averages")
+    afu.plot_combined_rolling_average(forecast_df)
+
+
+else:
+    st.info("Enter up to 4 tickers and click 'Run Forecast' to begin.")

@@ -16,7 +16,7 @@ if 'selected_country' not in st.session_state:
     st.session_state.selected_country = "England"
 
 st.set_page_config(page_title="Weather Comparison App", layout="wide")
-st.title("🌤️ Weather & Air Quality Explorer")
+st.title("Weather & Air Quality Explorer")
 st.markdown("Explore weather data and compare forecasts interactively!")
 
 option = st.radio("Choose an option:", ["View Single City", "Compare Two Cities"], horizontal=True)
@@ -28,13 +28,14 @@ def update_history(city, country):
     history.insert(0, entry)
     st.session_state.history = history[:5]
 
+
 def show_search_history():
     """Display clickable search history in sidebar"""
     if st.session_state.history:
-        st.sidebar.subheader("🔍 Recent Searches")
+        st.sidebar.subheader("Recent Searches")
         for idx, (h_city, h_country) in enumerate(st.session_state.history):
             if st.sidebar.button(
-                f"{h_city}, {h_country}",
+                label=f"{h_city}, {h_country}",
                 key=f"hist_{idx}",
                 help="Click to search again",
                 use_container_width=True
@@ -42,6 +43,7 @@ def show_search_history():
                 st.session_state.selected_city = h_city
                 st.session_state.selected_country = h_country
                 st.rerun()
+
 
 def display_current_weather(city, country):
     try:
@@ -51,8 +53,8 @@ def display_current_weather(city, country):
         current = prepare_current_weather(weather, aqi_data)
         
         if current:
-            st.subheader(f"📍 Current Weather: {city}, {country}")
-            st.markdown(f'<p style="font-size:24px; font-weight:1000; color:#1a73e8;">⏲️ Current Date: {current["Updated"]}</p>', unsafe_allow_html=True)
+            st.subheader(f" Current Weather: {city}, {country}")
+            st.write(f"Current Date: {current['Updated']}")
             
             # Main metrics row
             col1, col2, col3, col4 = st.columns(4)
@@ -93,7 +95,7 @@ def display_forecast(city, lat, lon):
         air_forecast = fetch_data(AIR_POLLUTION_FORECAST_URL, lat, lon)
 
         if forecast and forecast.get('cod') == '200':
-            st.subheader(f"📊 5-Day Forecast for {city}")
+            st.subheader(f" 5-Day Forecast for {city}")
             fig = plot_forecast(forecast, city)
             if fig:
                 st.pyplot(fig)
@@ -102,7 +104,7 @@ def display_forecast(city, lat, lon):
 
             summary = prepare_forecast_summary(forecast, air_forecast, city)
             if summary:
-                st.subheader("🧾 Forecast Summary")
+                st.subheader("Forecast Summary")
                 st.dataframe(pd.DataFrame(summary), use_container_width=True)
             else:
                 st.warning("No forecast summary available")
@@ -158,10 +160,10 @@ elif option == "Compare Two Cities":
 
                 # Current weather comparison
                 if data1["weather"] and data2["weather"]:
-                    st.subheader("🌍 Current Weather Comparison")
+                    st.subheader("Current Weather Comparison")
                     current1 = prepare_current_weather(data1["weather"], data1["aqi"])
                     current2 = prepare_current_weather(data2["weather"], data2["aqi"])
-                    st.markdown(f'<p style="font-size:24px; font-weight:300; color:#1a73e8;">⏲️ Current Date: {current1["Updated"]}</p>', unsafe_allow_html=True)
+                    st.write(f"Current Date: {current1['Updated']}")
             
                     if current1 and current2:
                         # City 1
@@ -204,7 +206,7 @@ elif option == "Compare Two Cities":
                                    
                  # Forecast comparison
                 if data1["forecast"] and data2["forecast"]:
-                    st.subheader("📈 Forecast Comparison")
+                    st.subheader("Forecast Comparison")
                     fig = plot_comparison(data1["forecast"], data2["forecast"], city1, city2)
                     if fig:
                         st.pyplot(fig)
@@ -230,7 +232,7 @@ elif option == "Compare Two Cities":
                             column_order.extend([f"{metric} ({city1})", f"{metric} ({city2})"])
                         
                         # Display formatted comparison
-                        st.subheader("🧾 Combined Forecast Summary")
+                        st.subheader("Combined Forecast Summary")
                         st.dataframe(combined[column_order], use_container_width=True)
 
             except Exception as e:

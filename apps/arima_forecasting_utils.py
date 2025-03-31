@@ -504,3 +504,396 @@ def plot_combined_rolling_average(forecast_table):
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+
+def forecast_prices(series_dict, close_dict, best_orders_dict, years):
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from statsmodels.tsa.arima.model import ARIMA
+
+    forecast_steps = years * 52
+    all_forecasts = {}
+
+    for ticker, series in series_dict.items():
+        order = best_orders_dict[ticker]
+        model = ARIMA(series, order=order).fit()
+
+        forecast_returns = model.forecast(steps=forecast_steps)
+        last_price = close_dict[ticker]['close'].iloc[-1]
+
+        forecast_index = pd.date_range(start=series.index[-1] + pd.Timedelta(weeks=1), periods=forecast_steps, freq='W')
+        forecast_prices = last_price * np.exp(np.cumsum(forecast_returns))
+        pct_growth_series = ((forecast_prices - last_price) / last_price) * 100
+        rolling_avg = forecast_prices.rolling(window=4).mean()
+
+        forecast_df = pd.DataFrame({
+            f"{ticker}_price": forecast_prices,
+            f"{ticker}_pct_growth": pct_growth_series,
+            f"{ticker}_rolling_avg": rolling_avg
+        }, index=forecast_index)
+
+        all_forecasts[ticker] = forecast_df
+
+        # Historical prices from current year
+        current_year = pd.Timestamp.today().year
+        hist_data = close_dict[ticker]['close']
+        hist_recent = hist_data[hist_data.index.year >= current_year]
+
+        # Plot forecast and historical
+        plt.figure(figsize=(12, 5))
+        plt.plot(hist_recent, label='Historical Price', color='black')
+        plt.plot(forecast_df.index, forecast_prices, label='Forecasted Price', linestyle='--', color='dodgerblue')
+        plt.axvline(x=forecast_index[0], color='red', linestyle=':', lw=2, label='Forecast Start')
+
+        final_growth = pct_growth_series.iloc[-1]
+        plt.annotate(f"{final_growth:.2f}% growth",
+                     xy=(forecast_index[-1], forecast_prices.iloc[-1]),
+                     xytext=(forecast_index[-1], forecast_prices.iloc[-1] * 1.05),
+                     arrowprops=dict(facecolor='green' if final_growth > 0 else 'red', arrowstyle="->"),
+                     fontsize=10, color='green' if final_growth > 0 else 'red')
+
+        plt.title(f"{ticker} Forecasted Prices and Growth (ARIMA{order})")
+        plt.xlabel("Date")
+        plt.ylabel("Price")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    combined = pd.concat(all_forecasts.values(), axis=1).fillna(0)
+
+    formatted_combined = combined.copy()
+    for col in formatted_combined.columns:
+        if "price" in col or "rolling_avg" in col:
+            formatted_combined[col] = formatted_combined[col].apply(lambda x: f"${x:,.2f}")
+        elif "pct_growth" in col:
+            formatted_combined[col] = formatted_combined[col].apply(lambda x: f"{x:.2f}%")
+
+    return formatted_combined
+
+
+def plot_all_acf_pacf(series_dict, lags=20):
+    import matplotlib.pyplot as plt
+    from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+
+    for ticker, series in series_dict.items():
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        plot_acf(series, lags=lags, ax=axes[0])
+        axes[0].set_title(f"{ticker} - ACF")
+        plot_pacf(series, lags=lags, ax=axes[1])
+        axes[1].set_title(f"{ticker} - PACF")
+        plt.tight_layout()
+        plt.show()
+
+def plot_combined_rolling_average(forecast_df):
+    import matplotlib.pyplot as plt
+
+    rolling_cols = [col for col in forecast_df.columns if "rolling_avg" in col]
+    if not rolling_cols:
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    for col in rolling_cols:
+        ax.plot(forecast_df.index, forecast_df[col].replace('[\$,]', '', regex=True).astype(float), label=col.replace("_rolling_avg", ""))
+    ax.set_title("Combined 4-Week Rolling Average Forecast")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Price")
+    ax.legend()
+    ax.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_all_acf_pacf(series_dict, lags=20):
+    import matplotlib.pyplot as plt
+    from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+
+    for ticker, series in series_dict.items():
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        plot_acf(series.dropna(), ax=axes[0], lags=lags)
+        axes[0].set_title(f"{ticker} - ACF")
+        plot_pacf(series.dropna(), ax=axes[1], lags=lags, method='ywm')
+        axes[1].set_title(f"{ticker} - PACF")
+        plt.tight_layout()
+        plt.show()
+
+
+def plot_combined_rolling_average(df):
+    import matplotlib.pyplot as plt
+
+    rolling_cols = [col for col in df.columns if 'rolling_avg' in col]
+    if not rolling_cols:
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    for col in rolling_cols:
+        df[col] = df[col].replace('[\$,]', '', regex=True).astype(float)
+        df[col].plot(ax=ax, label=col.split('_')[0])
+
+    ax.set_title("Combined Rolling Averages (4-week)")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Rolling Avg Price ($)")
+    ax.legend()
+    ax.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
+import matplotlib.pyplot as plt
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+
+def plot_all_acf_pacf(series_dict, lags=20):
+    import streamlit as st
+    for ticker, series in series_dict.items():
+        cleaned = series.dropna()
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        plot_acf(cleaned, ax=axes[0], lags=min(lags, len(cleaned)//2 - 1))
+        axes[0].set_title(f"{ticker} - ACF")
+        plot_pacf(cleaned, ax=axes[1], lags=min(lags, len(cleaned)//2 - 1), method='ywm')
+        axes[1].set_title(f"{ticker} - PACF")
+        plt.tight_layout()
+        st.pyplot(fig)
+
+def plot_combined_rolling_average(forecast_df):
+    import streamlit as st
+    rolling_cols = [col for col in forecast_df.columns if "rolling_avg" in col]
+    if not rolling_cols:
+        st.warning("No rolling average columns found.")
+        return
+    fig, ax = plt.subplots(figsize=(12, 5))
+    for col in rolling_cols:
+        forecast_df[col.replace('_rolling_avg', '_price')] = forecast_df[col.replace('_rolling_avg', '_price')].replace('[\$,]', '', regex=True).astype(float)
+        forecast_df[col] = forecast_df[col].replace('[\$,]', '', regex=True).astype(float)
+        ax.plot(forecast_df.index, forecast_df[col], label=col.replace("_rolling_avg", ""))
+    ax.set_title("Combined Rolling Averages")
+    ax.set_ylabel("Price")
+    ax.grid(True)
+    ax.legend()
+    st.pyplot(fig)
+
+
+def forecast_prices(series_dict, close_dict, best_orders_dict, years):
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import streamlit as st
+    from statsmodels.tsa.arima.model import ARIMA
+
+    forecast_steps = years * 52
+    all_forecasts = {}
+
+    for ticker, series in series_dict.items():
+        order = best_orders_dict[ticker]
+        model = ARIMA(series, order=order).fit()
+
+        forecast_returns = model.forecast(steps=forecast_steps)
+        last_price = close_dict[ticker]['close'].iloc[-1]
+
+        forecast_index = pd.date_range(start=series.index[-1] + pd.Timedelta(weeks=1), periods=forecast_steps, freq='W')
+        forecast_prices = last_price * np.exp(np.cumsum(forecast_returns))
+        pct_growth_series = ((forecast_prices - last_price) / last_price) * 100
+        rolling_avg = forecast_prices.rolling(window=4).mean()
+
+        forecast_df = pd.DataFrame({
+            f"{ticker}_price": forecast_prices,
+            f"{ticker}_pct_growth": pct_growth_series,
+            f"{ticker}_rolling_avg": rolling_avg
+        }, index=forecast_index)
+
+        all_forecasts[ticker] = forecast_df
+
+        current_year = pd.Timestamp.today().year
+        hist_data = close_dict[ticker]['close']
+        hist_recent = hist_data[hist_data.index.year >= current_year]
+
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.plot(hist_recent, label='Historical Price', color='black')
+        ax.plot(forecast_df.index, forecast_prices, label='Forecasted Price', linestyle='--', color='dodgerblue')
+        ax.axvline(x=forecast_index[0], color='red', linestyle=':', lw=2, label='Forecast Start')
+
+        final_growth = pct_growth_series.iloc[-1]
+        ax.annotate(f"{final_growth:.2f}% growth",
+                    xy=(forecast_index[-1], forecast_prices.iloc[-1]),
+                    xytext=(forecast_index[-1], forecast_prices.iloc[-1] * 1.05),
+                    arrowprops=dict(facecolor='green' if final_growth > 0 else 'red', arrowstyle="->"),
+                    fontsize=10, color='green' if final_growth > 0 else 'red')
+
+        ax.set_title(f"{ticker} Forecasted Prices and Growth (ARIMA{order})")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Price")
+        ax.legend()
+        ax.grid(True)
+        st.pyplot(fig)
+
+    combined = pd.concat(all_forecasts.values(), axis=1).fillna(0)
+
+    formatted_combined = combined.copy()
+    for col in formatted_combined.columns:
+        if "price" in col or "rolling_avg" in col:
+            formatted_combined[col] = formatted_combined[col].apply(lambda x: f"${x:,.2f}")
+        elif "pct_growth" in col:
+            formatted_combined[col] = formatted_combined[col].apply(lambda x: f"{x:.2f}%")
+
+    return formatted_combined
+
+def plot_combined_rolling_average(forecast_df):
+    import matplotlib.pyplot as plt
+    import streamlit as st
+
+    rolling_cols = [col for col in forecast_df.columns if "rolling_avg" in col]
+    if not rolling_cols:
+        st.warning("No rolling average columns found.")
+        return
+
+    for col in rolling_cols:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        label = col.replace("_rolling_avg", "")
+        try:
+            forecast_df[col] = forecast_df[col].replace('[\$,]', '', regex=True).astype(float)
+            ax.plot(forecast_df.index, forecast_df[col], label=f"{label} Rolling Avg", color='steelblue')
+            ax.set_title(f"{label} - Rolling Average Forecast")
+            ax.set_ylabel("Price")
+            ax.set_xlabel("Date")
+            ax.legend()
+            ax.grid(True)
+            st.pyplot(fig)
+        except Exception as e:
+            st.error(f"Error plotting {label}: {e}")
+
+
+def forecast_prices(series_dict, close_dict, best_orders_dict, years):
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import streamlit as st
+    from statsmodels.tsa.arima.model import ARIMA
+
+    forecast_steps = years * 52
+    all_forecasts = {}
+    combined_plot_data = {}
+
+    for ticker, series in series_dict.items():
+        order = best_orders_dict[ticker]
+        model = ARIMA(series, order=order).fit()
+
+        forecast_returns = model.forecast(steps=forecast_steps)
+        last_price = close_dict[ticker]['close'].iloc[-1]
+
+        forecast_index = pd.date_range(start=series.index[-1] + pd.Timedelta(weeks=1), periods=forecast_steps, freq='W')
+        forecast_prices = last_price * np.exp(np.cumsum(forecast_returns))
+        pct_growth_series = ((forecast_prices - last_price) / last_price) * 100
+        rolling_avg = forecast_prices.rolling(window=4).mean()
+
+        forecast_df = pd.DataFrame({
+            f"{ticker}_price": forecast_prices,
+            f"{ticker}_pct_growth": pct_growth_series,
+            f"{ticker}_rolling_avg": rolling_avg
+        }, index=forecast_index)
+
+        all_forecasts[ticker] = forecast_df
+        combined_plot_data[ticker] = forecast_prices
+
+    # Plot all forecasts in one chart
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for ticker, prices in combined_plot_data.items():
+        ax.plot(prices.index, prices, linestyle='--', label=f"{ticker} Forecast")
+        # Add historical price line
+        current_year = pd.Timestamp.today().year
+        hist_data = close_dict[ticker]['close']
+        hist_recent = hist_data[hist_data.index.year >= current_year]
+        ax.plot(hist_recent.index, hist_recent.values, label=f"{ticker} Historical")
+    ax.axvline(x=forecast_index[0], color='red', linestyle=':', lw=2, label='Forecast Start')
+    ax.set_title("Forecasted Prices and Growth")
+    ax.set_ylabel("Price")
+    ax.set_xlabel("Date")
+    ax.legend()
+    ax.grid(True)
+    st.pyplot(fig)
+
+    combined = pd.concat(all_forecasts.values(), axis=1).fillna(0)
+
+    formatted_combined = combined.copy()
+    for col in formatted_combined.columns:
+        if "price" in col or "rolling_avg" in col:
+            formatted_combined[col] = formatted_combined[col].apply(lambda x: f"${x:,.2f}")
+        elif "pct_growth" in col:
+            formatted_combined[col] = formatted_combined[col].apply(lambda x: f"{x:.2f}%")
+
+    return formatted_combined
+
+
+def forecast_prices(series_dict, close_dict, best_orders_dict, years):
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import streamlit as st
+    from statsmodels.tsa.arima.model import ARIMA
+
+    forecast_steps = years * 52
+    all_forecasts = {}
+    combined_plot_data = {}
+
+    for ticker, series in series_dict.items():
+        order = best_orders_dict[ticker]
+        model = ARIMA(series, order=order).fit()
+
+        forecast_returns = model.forecast(steps=forecast_steps)
+        last_price = close_dict[ticker]['close'].iloc[-1]
+
+        forecast_index = pd.date_range(start=series.index[-1] + pd.Timedelta(weeks=1), periods=forecast_steps, freq='W')
+        forecast_prices = last_price * np.exp(np.cumsum(forecast_returns))
+        pct_growth_series = ((forecast_prices - last_price) / last_price) * 100
+        rolling_avg = forecast_prices.rolling(window=4).mean()
+
+        forecast_df = pd.DataFrame({
+            f"{ticker}_price": forecast_prices,
+            f"{ticker}_pct_growth": pct_growth_series,
+            f"{ticker}_rolling_avg": rolling_avg
+        }, index=forecast_index)
+
+        all_forecasts[ticker] = forecast_df
+        combined_plot_data[ticker] = {
+            "forecast": forecast_prices,
+            "last_growth": pct_growth_series.iloc[-1],
+            "final_value": forecast_prices.iloc[-1]
+        }
+
+    # Plot all forecasts in one chart
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for ticker, data in combined_plot_data.items():
+        forecast_prices = data["forecast"]
+        ax.plot(forecast_prices.index, forecast_prices, linestyle='--', label=f"{ticker} Forecast")
+
+        # Historical
+        hist_data = close_dict[ticker]['close']
+        hist_recent = hist_data[hist_data.index.year >= pd.Timestamp.today().year]
+        ax.plot(hist_recent.index, hist_recent.values, label=f"{ticker} Historical")
+
+        # Annotate % growth
+        ax.annotate(f"{data['last_growth']:.2f}% growth",
+                    xy=(forecast_prices.index[-1], data["final_value"]),
+                    xytext=(forecast_prices.index[-1], data["final_value"] * 1.05),
+                    textcoords="data",
+                    ha='right',
+                    arrowprops=dict(facecolor='green' if data["last_growth"] > 0 else 'red', arrowstyle="->"),
+                    fontsize=9,
+                    color='green' if data["last_growth"] > 0 else 'red')
+
+    ax.axvline(x=forecast_prices.index[0], color='red', linestyle=':', lw=2, label='Forecast Start')
+    ax.set_title("Forecasted Prices and Growth")
+    ax.set_ylabel("Price")
+    ax.set_xlabel("Date")
+    ax.legend()
+    ax.grid(True)
+    st.pyplot(fig)
+
+    combined = pd.concat(all_forecasts.values(), axis=1).fillna(0)
+
+    formatted_combined = combined.copy()
+    for col in formatted_combined.columns:
+        if "price" in col or "rolling_avg" in col:
+            formatted_combined[col] = formatted_combined[col].apply(lambda x: f"${x:,.2f}")
+        elif "pct_growth" in col:
+            formatted_combined[col] = formatted_combined[col].apply(lambda x: f"{x:.2f}%")
+
+    return formatted_combined
