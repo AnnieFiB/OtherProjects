@@ -156,11 +156,12 @@ def prepare_forecast_summary(forecast, air_forecast=None):
         return None
 
 def plot_forecast(forecast, city_name):
-    """Display single city forecast plots"""
+    """Display single city forecast with all metrics on one combined chart"""
     if not forecast or not forecast.get("list"):
-        return
+        return None
 
     try:
+        # Create DataFrame from forecast data
         df = pd.DataFrame([{
             "datetime": datetime.fromtimestamp(item["dt"]),
             "temp": item["main"].get("temp", 0),
@@ -168,26 +169,53 @@ def plot_forecast(forecast, city_name):
             "rain": item.get("rain", {}).get("3h", 0)
         } for item in forecast["list"]])
 
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 8))
+        # Create figure with primary axis
+        fig, ax = plt.subplots(figsize=(12, 6))
         
-        ax1.plot(df["datetime"], df["temp"], 'r-')
-        ax1.set_ylabel('Temperature (°C)')
-        ax1.set_title(f'{city_name} Forecast')
-        ax1.grid(True)
+        # Plot temperature (line, left axis)
+        color = 'tab:red'
+        ax.set_xlabel('Date/Time')
+        ax.set_ylabel('Temperature (°C)', color=color)
+        temp_line = ax.plot(df["datetime"], df["temp"], color=color, linewidth=2, label='Temperature')
+        ax.tick_params(axis='y', labelcolor=color)
+        ax.grid(True, linestyle=':', alpha=0.7)
 
-        ax2.plot(df["datetime"], df["humidity"], 'b-')
-        ax2.set_ylabel('Humidity (%)')
-        ax2.grid(True)
+        # Create secondary axis for humidity
+        ax2 = ax.twinx()
+        color = 'tab:blue'
+        ax2.set_ylabel('Humidity (%)', color=color)
+        hum_line = ax2.plot(df["datetime"], df["humidity"], color=color, 
+                           linestyle='--', alpha=0.8, label='Humidity')
+        ax2.tick_params(axis='y', labelcolor=color)
 
-        ax3.bar(df["datetime"], df["rain"], width=0.05, color='blue', alpha=0.5)
-        ax3.set_ylabel('Rain (mm)')
-        ax3.grid(True)
+        # Plot rain as bars on a separate scale (right side)
+        ax3 = ax.twinx()
+        color = 'tab:green'
+        ax3.spines['right'].set_position(('outward', 60))  # Offset the third axis
+        rain_bars = ax3.bar(df["datetime"], df["rain"], width=0.02, 
+                           color=color, alpha=0.5, label='Rain')
+        ax3.set_ylabel('Rain (mm)', color=color)
+        ax3.tick_params(axis='y', labelcolor=color)
+        
+        # Set sensible y-limit for rain (max + 20% or 5mm if no rain)
+        max_rain = max(df["rain"])
+        ax3.set_ylim(0, max_rain * 1.2 if max_rain > 0 else 5)
+
+        # Add title and combined legend
+        plt.title(f'{city_name} Weather Forecast', pad=20)
+        
+        # Combine all plot elements for legend
+        lines = temp_line + hum_line + [rain_bars]
+        labels = [l.get_label() for l in lines]
+        ax.legend(lines, labels, loc='upper left', bbox_to_anchor=(0, -0.15), 
+                 ncol=3, frameon=False)
 
         plt.tight_layout()
-        plt.show()
+        return fig
     
     except Exception as e:
         print(f"Plotting error: {str(e)}")
+        return None
 
 def plot_comparison(forecast1, forecast2, city1_name, city2_name):
     """Compare two cities' forecasts visually"""
