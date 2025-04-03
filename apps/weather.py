@@ -1,31 +1,15 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 import requests
 from datetime import datetime, timedelta
 from collections import Counter
 import matplotlib.pyplot as plt
 import pandas as pd
+import streamlit as st
 
 # Step 1: Load API key from .env file
-# Load from .env first
-load_dotenv()
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
-
-# Fallback to Streamlit Secrets if available
-if not API_KEY:
-    try:
-        import streamlit as st
-        API_KEY = st.secrets.get("OPENWEATHER_API_KEY")
-    except:
-        pass  # Not running in Streamlit environment
-
-if not API_KEY:
-    raise ValueError(
-        "Please set OPENWEATHER_API_KEY in either:\n"
-        "1. .env file (local development)\n"
-        "2. Streamlit Secrets (deployed apps)"
-    )
+API_KEY = st.secrets.get("OPENWEATHER_API_KEY")
 
 # API endpoints
 GEO_URL = "http://api.openweathermap.org/geo/1.0/direct"
@@ -179,11 +163,12 @@ def prepare_forecast_summary(forecast, air_forecast=None, city_name=""):
         return None
 
 def plot_forecast(forecast, city_name):
-    """Display single city forecast plots"""
+    """Display single city forecast with all metrics on one chart"""
     if not forecast or not forecast.get("list"):
         return None
 
     try:
+        # Create DataFrame from forecast data
         df = pd.DataFrame([{
             "datetime": datetime.fromtimestamp(item["dt"]),
             "temp": item["main"].get("temp", 0),
@@ -191,23 +176,44 @@ def plot_forecast(forecast, city_name):
             "rain": item.get("rain", {}).get("3h", 0)
         } for item in forecast["list"]])
 
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 8))
+        # Create figure with single axis
+        fig, ax1 = plt.subplots(figsize=(12, 6))
         
-        ax1.plot(df["datetime"], df["temp"], 'r-')
-        ax1.set_ylabel('Temperature (°C)')
-        ax1.set_title(f'{city_name} Forecast')
-        ax1.grid(True)
+        # Plot temperature (primary axis)
+        color = 'tab:red'
+        ax1.set_xlabel('Date/Time')
+        ax1.set_ylabel('Temperature (°C)', color=color)
+        temp_line = ax1.plot(df["datetime"], df["temp"], color=color, label='Temperature')
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.grid(True, alpha=0.3)
 
-        ax2.plot(df["datetime"], df["humidity"], 'b-')
-        ax2.set_ylabel('Humidity (%)')
-        ax2.grid(True)
+        # Create secondary axis for humidity
+        ax2 = ax1.twinx()
+        color = 'tab:blue'
+        ax2.set_ylabel('Humidity (%)', color=color)
+        hum_line = ax2.plot(df["datetime"], df["humidity"], color=color, linestyle='--', label='Humidity')
+        ax2.tick_params(axis='y', labelcolor=color)
 
-        ax3.bar(df["datetime"], df["rain"], width=0.05, color='blue', alpha=0.5)
-        ax3.set_ylabel('Rain (mm)')
-        ax3.grid(True)
+        # Create third axis for rain (bars)
+        ax3 = ax1.twinx()
+        color = 'tab:green'
+        # Offset the rain axis to prevent overlap
+        ax3.spines['right'].set_position(('outward', 60))
+        rain_bar = ax3.bar(df["datetime"], df["rain"], width=0.02, color=color, alpha=0.5, label='Rain')
+        ax3.set_ylabel('Rain (mm)', color=color)
+        ax3.tick_params(axis='y', labelcolor=color)
+        ax3.set_ylim(0, max(df["rain"])*1.2 if max(df["rain"]) > 0 else 5)  # Set sensible rain scale
+
+        # Add title and legend
+        ax1.set_title(f'{city_name} Weather Forecast')
+        
+        # Combine legends from all axes
+        lines = temp_line + hum_line + [rain_bar]
+        labels = [l.get_label() for l in lines]
+        ax1.legend(lines, labels, loc='upper left')
 
         plt.tight_layout()
-        return fig  # Return figure instead of showing
+        return fig
     
     except Exception as e:
         print(f"Plotting error: {str(e)}")
