@@ -495,3 +495,50 @@ def plot_outlier_distributions(original, capped, column):
     plt.show()
 
 
+def plot_outliers_boxplot(df, title="Outlier Boxplot", figsize=(15, 6)):
+    """
+    Plots horizontal boxplots for all numeric columns in a DataFrame.
+    
+    Parameters:
+    - df (pd.DataFrame): The input DataFrame.
+    - title (str): Plot title.
+    - figsize (tuple): Figure size.
+    """
+    # Select numeric columns
+    numeric_df = df.select_dtypes(include=['int64', 'float64'])
+
+    if numeric_df.empty:
+        print("No numeric columns found to plot.")
+        return
+
+    # Plot
+    plt.figure(figsize=figsize)
+    sns.boxplot(data=numeric_df, orient="h")
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
+
+
+def winsorize_dataframe(df, numeric_cols=None, limits=[0.01, 0.99]):
+    """
+    Applies Winsorization to numeric columns in a DataFrame.
+    
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame to modify.
+    - numeric_cols (list): List of numeric column names to Winsorize. If None, it auto-detects numeric columns.
+    - limits (list): Lower and upper quantile limits (e.g., [0.01, 0.99]).
+
+    Returns:
+    - pd.DataFrame: DataFrame with Winsorized numeric columns.
+    """
+    # Detect numeric columns if not provided
+    if numeric_cols is None:
+        numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
+
+    # Apply Winsorization to each numeric column
+    for col in numeric_cols:
+        lower = df[col].quantile(limits[0])
+        upper = df[col].quantile(limits[1])
+        df[col] = df[col].clip(lower=lower, upper=upper)
+
+    return df

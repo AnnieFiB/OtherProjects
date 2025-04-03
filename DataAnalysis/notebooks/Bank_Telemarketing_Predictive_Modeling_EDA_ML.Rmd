@@ -1,0 +1,720 @@
+---
+title: "Bank_Telemarketing_Predictive_Analytics"
+author: "Anthonia Fisuyi"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: 
+    latex_engine: lualatex
+    keep_tex: yes
+    fig_height: 5
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data-Driven Bank Telemarketing Concept.
+
++ Statistical Modeling Approach; 
+    1. Data Exploration and Feature Selection using RFEand Random Forest (RF)
+    2. DM Model:
+        i. Probability outputs:logistic regression (LR),  Decision trees(DTs) ,Neural
+        Networks(NN), Naive Bayes (NB), and Random Forest (RF)
+    3. K-fold cross-validation techniques
+        i. using a 10 fold cross validation for all proposed statistical model provides a
+          more accurate estimate of each model's performance than simply evaluating the model
+          on a single test set.
+        ii. It also allows for the use of all available data for training and validation,
+      which can be important for small datasets.
+    4. Evaluation Metrics :
+      + Confusion Matrix which helps compare predictions of a model with actual results
+      + Area Under the ROC Curve (AUC – ROC) plot between model sensitivity and specificity 
+      + Predictive metric : MAE and ME
+      + Performance metric: Accuracy, recall, precision and f1 score
+
+## 1. Clearing environment , loading appropriate libraries and reading datasets
+### Setting Working Directory
+
+```{r setting working directory}
+rm(list=ls())
+
+setwd("C:/Users/Probook/OneDrive/Challenge-Personal/Projects/BankTelemarketingML")
+
+
+```
+
+### Loading Libraries
+
+```{r loading libraries ,  message=FALSE, warning=FALSE}
+
+library(readr)
+library("ggplot2")
+library("tidyverse")
+library("fpp2")
+library("dplyr") # for data wrangling
+library("DataExplorer") # for exploratory data analysis
+library("class") # for exploratory data analysis
+
+
+library(caret) # for implementing RFE for feature selection
+library(randomForest) #for implementing RFE for feature selection
+library(e1071) # for Naive
+library(rpart) # for DT
+library(rpart.plot) # for DT
+library(nnet) # for NN
+
+# set seed for reproducibility
+set.seed(123)
+```
+
+### Importing Dataset
+
+```{r  import datasets}
+test <- read_csv("test.csv", show_col_types = FALSE )
+train <- read_csv("train.csv", show_col_types = FALSE)
+
+head(train)
+head(test)
+```
+
+## 2.  Exploratory Analysis
+  Exploring the dataset to gain an understanding of its structure and content. This includes looking at summary statistics, identifying missing values, outliers, and visualizing the data. 
+  
+### Data Exploration
+
+```{r Data Exploration, fig.path='Plots/'}
+# Code adapted from Garrett Grolemund's R for Data Science (2017)
+# https://r4ds.had.co.nz/
+
+str(train)
+
+# Remove non-numeric columns
+train_numeric <- train %>% select_if(is.numeric)
+
+#library(ggplot2)
+ggplot(train, aes(x = age, y = balance)) + geom_point()
+
+DataExplorer::plot_intro(train , title = "Train_set Exploratory Analysis") # check the types of variables
+
+# Identify outliers using Z-score method
+z_scores <- scale(train_numeric)
+outliers <- rowSums(z_scores >= 3) > 0
+
+# Print number of outliers
+cat("Number of outliers:", sum(outliers))
+
+```
+
++ There are no missing values in the data. 52.9% of the variables are numerical, while the other 47.1% is categorical with a total of 3593 outliers.
+
+
+### Correlation Analysis
++ A corrolation plot can be plotted on the numerical data to find features that are highly positively correlated and to be included in features for fitting the DM model
+
+```{r Correlation Analysis, fig.path='Plots/', message=FALSE}
+
+library(car)
+library(corrplot)
+
+corrplot(cor(train_numeric)) ## the 'darker' the circles, the more positively correlated the variables.
+```
+
+*previous , pday and duration has a high positive corellation and would be included in the features for fitting the models*
+
+## 3. Data Preprocessing. 
+  This includes handling missing values , outliers, encoding categorical variables, and scaling numerical features.
+
+### Missing Data
+
+```{r handling missing data}
+#train <- na.omit(train) ~ no missing data so step is excluded
+```
+
+#### Handling Outlier
+
+The Winsorization method is to be used for dealing with outliers. It requires utilising a function from the DescTools package to swap out the extreme values for the nearest non-extreme value
+
+```{r outliers , fig.path='Plots/'}
+boxplot(train_numeric , title = "Train_set Outliers")
+```
+
+```{r winsorization , fig.path='Plots/'}
+
+#code adapted from https://search.r-project.org/CRAN/refmans/DescTools/html/Winsorize.html#:~:text=Winsorizing%20a%20vector%20means%20that,the%20most%20extreme%20retained%20values.
+
+#get all numeric variable column names
+train_outl <- train %>%  select_if(is.numeric) %>%  names()
+
+# Winsorize all numeric variables at the 1% level
+train_cleaned <- train %>%
+  mutate_at(vars(all_of(train_outl)), list(~DescTools::Winsorize(., probs=c(0.01, 0.99))))
+
+boxplot(train_cleaned%>%  select_if(is.numeric) ,
+        title = " Cleaned Train_set")
+```
+
+
+### Encoding
+
+```{r encoding categorical variables }
+# Code adapted from Garrett Grolemund's R for Data Science (2017)
+# https://r4ds.had.co.nz/ 
+
+# recoding categorical features as factors
+train <- train %>%   mutate_if(is.character, factor) 
+test <- test %>%    mutate_if(is.character, factor) 
+
+
+# recoding target variable as factor
+train$y <- as.factor(train$y)
+test$y <- as.factor(test$y)
+
+table(train$y) # view result
+
+```
+### Feature Selection 
+
+Cross-tuneRF() validation's function is used to fine-tune the RFE model's number of trees (ntree) in order to speed up the computation time required to discover the optimal variables via the Recursive Feature Elimination (RFE) method.
+
+```{r Feature Selection}
+# codes adapted from Okan Bulut (2021) Effective Feature Selection: Recursive Feature Elimination Using R
+#https://towardsdatascience.com/effective-feature-selection-recursive-feature-elimination-using-r-148ff998e4f7#:~:text=Recursive%20Feature%20Elimination%C2%B2%2C%20or%20shortly,the%20optimal%20combination%20of%20features.
+# Set up the RFE control parameters
+set.seed(123)
+
+rfctrl <- rfeControl(functions = rfFuncs, method = "cv", number = 10, verbose = FALSE)
+
+# Features
+x <- train %>% select(-ncol(train)) %>% as.data.frame()
+
+# Target variable
+y <- train$y
+
+# Check if target variable is categorical
+if (is.factor(y) || is.character(y) || length(unique(y)) <= 5) {
+  method <- "rf"
+} else {
+  stop("The response variable appears to be continuous with fewer unique values. Consider if classification is more appropriate.")
+}
+
+# Run RFE
+rfemodel <- rfe(x = x, y = y, rfeControl = rfctrl, method = method, sizes = c(10), ntree = 100)
+
+
+# Print important variables
+varImp(rfemodel)
+
+```
+
+#### Visualizing important variable(s)
+
+```{r d. Important Variables, fig.path='Plots/'}
+
+set.seed(123)# ensure results are repeatable
+
+important_var <- varImp(rfemodel, scale = FALSE) # estimate variable importance
+
+# create a data frame for the variable importance
+important_var_df <- data.frame(
+  Variables = rownames(important_var),
+  Importance = important_var$Overall)
+
+# Save the table to a CSV file
+write.table(important_var_df,
+            file = 'Tables/ImportantFeatures.csv', sep = ",",
+            row.names = FALSE)
+
+# plot the variable importance using ggplot2
+ggplot(important_var_df, aes(x = Importance, y = Variables)) +
+  geom_point() +
+  geom_segment(aes(x = 0, xend = Importance, y = Variables, yend = Variables)) +
+  labs(x = "Importance", y = "Variables", title = "Variable Importance Plot") +
+  theme_bw()
+
+```
+
++ Result further confirmed the inclusion of day, previous and duration as part of the predictor variables to be used in the predictive models: 
+
+## 4. DM models (train dataset)
+
+### K-fold Validation
+
+```{r traincontrol}
+# Code adapted from https://www.rdocumentation.org/packages/caret/versions/6.0-92/topics/trainControl
+# specifying the cross-validation method
+tctrl <- trainControl(method = "cv" , number = 10)
+```
+
+### Logistic Regression Model.
+   ~  Training the classification model using the selected variables: `r  predictors(rfemodel)` 
+   
+```{r , logistic regression}
+# Code adapted from Garrett Grolemund's R for Data Science (2017)
+# https://r4ds.had.co.nz/
+
+set.seed(123)
+# Subset the original dataset based on the selected features
+train_set <- train_cleaned[, important_var_df$Variables]
+test_set <- test[, important_var_df$Variables]
+
+train_set$y <- train$y
+test_set$y <- test$y
+
+
+# Train a logistic regression model with the selected features
+model_lr <- train(y ~. , data=train_set, method = "glm", family = "binomial", trControl = tctrl)
+
+model_lr
+
+```
+Accuracy: The GLM model achieved an accuracy ( `r model_lr$results$Accuracy`) of approximately 90.14% on average across the 10-fold cross-validation. This metric indicates the overall correctness of the predictions made by the model. *An accuracy of 90% suggests that the model is quite effective in distinguishing between the two classes ('0' and '1').*
+
+Kappa Coefficient: The Kappa coefficient , which measures the agreement between the predicted and actual classifications, is(`r model_lr$results$Kappa`). A Kappa value greater than 0 indicates that the model performs better than random chance. While 0.4166 is moderate, it suggests that the model's predictions are significantly better than random guessing.
+
+Model Reliability: The consistent high accuracy across the 10-fold cross-validation suggests that the model is robust and generalizes well to unseen data. This is crucial for ensuring that the model performs well beyond the data it was trained on.
+
+Potential Areas for Improvement: Despite the high accuracy, the moderate Kappa coefficient indicates that there might be room for improvement in the model's ability to correctly classify instances, especially focusing on reducing false positives and false negatives.
+
+
+#### GLM Model Evaluation on test set 
+
+```{r glm_test_predict}
+# Code adapted from Dooruj Rambaccussing's Predictive Analytics (2023)
+
+set.seed(123)
+
+test$prediction_logistic <- predict(model_lr, newdata = test_set)
+
+confusionMatrix(test$prediction_logistic, test_set$y)
+```
+ + from the confusion matrix, only `r confusionMatrix(test$prediction_logistic, test_set$y)$table[2,2] ` good classifications when we would have liked to get all of them correct at `r confusionMatrix(test$prediction_logistic, test_set$y)$table[2,2] + confusionMatrix(test$prediction_logistic, test_set$y)$table[1,2]`.
+ + Class Imbalance: The prevalence of class '0' (88.49%) indicates a slight imbalance, influencing metrics like specificity.
+
+ + Model Performance: The model performs well in terms of accuracy and sensitivity, but shows lower specificity, suggesting potential challenges in correctly identifying negatives.
+
+
+### Random Forest
+  Running a simple random forest with adjusted hyperparameter and using only the top predictors from the rfe model
+
+```{r Random Forest}
+set.seed(123)
+
+model_rf <- train(y ~. ,train_set, method = "rf", ntree = 200, trControl = tctrl)
+model_rf
+
+```
+  
+#### RF Model Evaluation on test set 
+```{r rf_test_predict}
+
+test$prediction_rf = predict(model_rf,test_set , type = "raw")
+confusionMatrix(test$prediction_rf, test_set$y)
+```
+  
++ from the confusion matrix, only `r confusionMatrix(test$prediction_rf, test_set$y)$table[2,2] ` good classifications when we would have liked to get all of them correct at `r confusionMatrix(test$prediction_rf, test_set$y)$table[2,2] + confusionMatrix(test$prediction_rf, test_set$y)$table[1,2]`.
+
+### Naive Bayes model
+
+```{r Naive Bayes }
+model_nb <- naiveBayes(y ~ ., data = train_set)
+
+model_nb
+```
+
+#### NB Model Evaluation on test set 
+ 
+```{r nb_test_predict}
+test$prediction_nb = predict(model_nb,newdata = test_set,  type = "class")
+
+confusionMatrix(test$prediction_nb, test_set$y )
+```
+ 
++ from the confusion matrix, only `r confusionMatrix(test$prediction_nb, test_set$y)$table[2,2] ` good classifications when you would have liked to get all of them correct at `r confusionMatrix(test$prediction_nb, test_set$y)$table[2,2] + confusionMatrix(test$prediction_nb, test_set$y)$table[1,2]`.
+
+
+### Decision Tree model (DTs)
+
+```{r Decision Tree , fig.path='Plots/'}
+# Code adapted from Dooruj Rambaccussing's Predictive Analytics (2023)
+
+set.seed(123)
+# Create a vector of values for the complexity parameter
+cp_values <- seq(0.01, 0.5, by = 0.01)
+
+model_dt <- train(y ~. , data= train_set,  method = "rpart",trControl = tctrl,
+                tuneGrid = expand.grid(cp = cp_values) )
+
+rpart.plot(model_dt$finalModel, main = "Decision Tree for Train Dataset") # plot decision tree
+
+model_dt
+
+
+```
+
++ Rules example:
+  If the duration >=  828 days , the probability of the outcome being y =1 is very low(4%). This suggests that duration is an important predictor in determining the outcome, and that longer durations are less likely to result in y=1.
+
+
+#### DT Model Evaluation on test set 
+
+```{r dt_test_predict}
+test$prediction_CART = predict(model_dt,test_set)
+confusionMatrix(test$prediction_CART, test_set$y )
+```
+
+The performance of the CART model is similar to the previous logistic regression model, with a slightly lower accuracy.
+The sensitivity and specificity values are also similar. Overall, both models seem to have performed similarly, and the choice of which model to use would depend on other factors such as interpretability, complexity, and computational efficiency (step 3).
+
+
+### Neural Networks (NN) model
+
+```{r Neural Networks , warning=FALSE}
+#code adapted from https://cran.r-project.org/web/packages/caret/caret.pdf
+
+set.seed(123)
+
+# Define the hyperparameter grid
+grid <- expand.grid(size = c(1, 2, 3), decay = c(0, 0.01, 0.1))
+
+model_nn <- train(y ~ ., data = train_set, method = "nnet", trControl = tctrl,tuneGrid = grid,
+                  hidden=3, act.fct = "logistic", trace = FALSE, maxit = 1000)
+
+model_nn
+```
+
+#### NN Model Evaluation on test set 
+```{r nn_test_predict}
+test$prediction_nn = predict(model_nn,test_set)
+
+confusionMatrix(test$prediction_nn, test_set$y)
+```
+
+
+## 5.  Results
+
+### Evaluating DM model performance: ROC(AUC) curve
+
+```{r ROC , fig.path='Plots/' , warning=FALSE, message=FALSE}
+
+# Code adapted from Dooruj Rambaccussing's Predictive Analytics (2023)
+
+library(pROC)
+
+roc_lr <- roc(as.numeric(test_set$y),as.numeric(test$prediction_logistic ))
+roc_rf <- roc(as.numeric(test_set$y),as.numeric(test$prediction_rf))
+roc_nb <- roc(as.numeric(test_set$y),as.numeric(test$prediction_nb))
+roc_dt <- roc(as.numeric(test_set$y),as.numeric(test$prediction_CART))
+roc_nn <- roc(as.numeric(test_set$y),as.numeric(test$prediction_nn))
+
+
+par(mar=c(4,4,3,2)+0.1) # Increase margin
+
+plot(roc_lr, col = "purple" , lty = 2 )
+lines(roc_rf, col = "green") 
+lines(roc_nb, col = "blue")
+lines(roc_dt, col="yellow")
+lines(roc_nn, col="red")
+
+legend("bottomright", 
+       legend = c("Logistic", "Random forest", "Naive Bayes Classifier",
+                  "Decision Tree" ,"Neural Network"),
+       col = c("purple", "green", "blue","yellow", "red"), 
+       lty  = c(2, 1, 1, 1, 1),  pch = 1)
+
+```
+
+The ROC curve evaluates the performance of different classification models. Here are the key insights:
+
++ Logistic Regression:
+  > Performs best among the models.
+  > Curve closest to the top left corner (ideal performance).
+  
++ Random Forest and Neural Network:
+> Also exhibit good performance.
+> Curves close to the top left corner.
+
++ Naive Bayes Classifier and Decision Tree:
+> Show less desirable performance.
+> Curves further from the top left corner.
+
+**Note: the closer the curve is to the top left corner, the better the model’s ability to distinguish between classes. Logistic Regression seems promising for this task.**
+
+
+### kappa and AUC Values
+
+```{r AUC}
+#code adapted from https://cran.r-project.org/web/packages/caret/caret.pdf
+
+# print the AUC values
+cat("AUC of LR model:", auc(roc_lr), "/n", 
+    "AUC of Random Forest model:", auc(roc_rf), "/n", 
+    "AUC of Naive Bayes model:", auc(roc_nb), "/n", 
+    "AUC of Decision Tree model:", auc(roc_dt), "/n", 
+    "AUC of Neural Network model:", auc(roc_nn), "/n")
+
+## # Extract kappa coefficient
+k_lr <- confusionMatrix(test$prediction_logistic, test_set$y)$overall['Kappa']
+k_rf <- confusionMatrix(test$prediction_rf, test_set$y)$overall['Kappa']
+k_nb <- confusionMatrix(test$prediction_nb, test_set$y)$overall['Kappa']
+k_dt <- confusionMatrix(test$prediction_CART, test_set$y)$overall['Kappa']
+k_nn <- confusionMatrix(test$prediction_nn, test_set$y)$overall['Kappa']
+
+
+cat("/n",
+    "Kappa for LR model:", k_lr, "/n", 
+    "Kappa for Random Forest model:", k_rf, "/n", 
+    "Kappa for Naive Bayes model:", k_nb, "/n", 
+    "Kappa for Decision Tree model:", k_dt, "/n", 
+    "Kappa for Neural Network model:", k_nn, "/n")
+
+
+# Create a data frame with model names and AUC and kappa values
+auc_k_df <- data.frame(Model = c("LR", "RF", "NB", "DT", "NN"),
+                       AUC = c(auc(roc_lr), auc(roc_rf), auc(roc_nb), auc(roc_dt), auc(roc_nn)),
+                       kappa = c(k_lr, k_rf, k_nb, k_dt,k_nn))
+
+# Write the data frame to a CSV file
+write.csv(auc_k_df, file = "Tables/AUC_Kappa.csv", row.names = FALSE)
+```
++ AUC (Area Under the Curve):
+> AUC measures the overall performance of a binary classification model. It represents the area under the Receiver Operating Characteristic (ROC) curve.
+> Higher AUC values indicate better discrimination ability of the model.
+> Here are the AUC values for each model:
+Logistic Regression (LR): 0.6737
+Random Forest: 0.7256
+Naive Bayes: 0.7285
+Decision Tree: 0.6729
+Neural Network: 0.7176
+
++ Kappa:
+> Kappa (Cohen’s Kappa) assesses the agreement between predicted and actual class labels, considering chance agreement.
+> Values close to 1 indicate strong agreement beyond chance.
+> Kappa values for each model:
+LR: 0.4264
+Random Forest: 0.5024
+Naive Bayes: 0.4164
+Decision Tree: 0.4241
+Neural Network: 0.4949
+
+**Note: both AUC and Kappa provide valuable insights into model performance. You can choose the model based on your specific requirements and trade-offs between sensitivity, specificity, and overall accuracy.**
+
+### Confusion Matrix Result and interpretation
+
+```{r Confusion Matrix Result}
+
+# confusion matrix codes adapted from: https://www.rdocumentation.org/packages/caret/versions/6.0-86/topics/confusionMatrix
+# Code for writing a dataframe to a CSV file: https://www.rdocumentation.org/packages/utils/versions/3.6.2/topics/write.table
+
+
+# print the Confusion Matrix values
+cm_lr <- confusionMatrix(test$prediction_logistic, test_set$y)$table
+cm_rf <- confusionMatrix(test$prediction_rf, test_set$y)$table
+cm_nb <-confusionMatrix(test$prediction_nb, test_set$y)$table
+cm_dt <-confusionMatrix(test$prediction_CART, test_set$y)$table
+cm_nn <-confusionMatrix(test$prediction_nn, test_set$y)$table
+
+# create a list of confusion matrices for each model
+cm_list <- list(cm_lr, cm_rf, cm_nb, cm_dt, cm_nn)
+
+# create a function to extract TP, TN, FP, and FN from each confusion matrix and return as a named vector
+get_metrics <- function(cm) {
+  TP <- cm[2,2]
+  TN <- cm[1,1]   
+  FP <- cm[2,1]   
+  FN <- cm[1,2] 
+  return(c(TP = TP, TN = TN, FP = FP, FN = FN))}
+
+# apply the function to each confusion matrix in the list
+cm_vec_list <- lapply(cm_list, get_metrics)
+
+# combine the vectors into a data frame with one column header
+cm_df <- data.frame(Model = c("LR", "RF", "NB", "DT", "NN"),
+                    do.call(rbind, cm_vec_list))
+rownames(cm_df) <- NULL # set row names
+colnames(cm_df)[-1] <- c("TP", "TN", "FP", "FN") # set column names
+cm_df # show the resulting data frame
+
+# Save the table to a CSV file
+write.table(cm_df,
+            file = 'Tables/ConfusionMatrix.csv', sep = ",",
+            row.names = FALSE)
+```
+Interpretation and Insights:
+*True Positives (TP):*
+> - TP represents the instances correctly predicted as positive (actual positive instances correctly identified by the model).
+> - Models NB (Naive Bayes) and RF (Random Forest) have relatively higher TP counts, indicating better performance in identifying positive cases compared to LR (Logistic Regression), DT (Decision Tree), and NN (Neural Network).
+
+*True Negatives (TN):*
+> - TN shows instances correctly predicted as negative (actual negative instances correctly identified by the model).
+> - LR has the highest TN count, suggesting it performs better in correctly identifying negative cases compared to other models.
+
+*False Positives (FP):*
+> - FP indicates instances predicted as positive but are actually negative (false alarms).
+> - Models NB and DT have higher FP counts, indicating more instances where the model incorrectly predicts a positive outcome.
+
+*False Negatives (FN):*
+> - FN represents instances predicted as negative but are actually positive (missed opportunities).
+> - Models NB and RF have lower FN counts, suggesting better performance in correctly identifying positive cases compared to LR, DT, and NN.
+
+*Model Comparison:*
+> - LR shows balanced performance in TN but higher FP and FN counts compared to other models.
+> - RF and NB perform well in TP and TN, but RF has a slightly higher FP count.
+> - NN has a relatively higher FN count, indicating it misses more positive cases.
+
+*Overall Performance:*
+> - Each model's performance should be evaluated based on specific application requirements and the importance of different metrics (e.g., sensitivity, specificity).
+> - Models like RF and NB might be preferred for scenarios where correctly identifying positive cases (high TP) is crucial, while LR might be suitable where minimizing false alarms (FP) is a priority.
+
+**Recommendations:**
+> - Further analyze model-specific metrics (e.g., accuracy, precision, recall) to gain deeper insights into each model's strengths and weaknesses.
+> - Consider adjusting model thresholds or exploring ensemble techniques to improve overall performance based on specific business objectives.
+> - Validate models on additional datasets to ensure robustness and generalizability in real-world applications.
+
+### DM Model(s) performance in terms of forecasting and prediction 
+
+```{r forecasting_Metrics}
+# Code for creating an empty dataframe to store the metrics adapted from: https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/data.frame
+
+# create a dataframe with the model confusion matrix results
+models <- c("LR", "RF", "NB", "DT","NN")
+TP <- cm_df$TP
+TN <- cm_df$TN
+FP <- cm_df$FP
+FN <- cm_df$FN
+data <- data.frame(Model = models, TP = TP, TN = TN, FP = FP, FN = FN)
+
+# create an empty dataframe to store the metrics
+metrics <- data.frame(Model = models, Accuracy = rep(NA, length(models)), Precision = rep(NA, length(models)), Sensitivity = rep(NA, length(models)), F1_Score = rep(NA, length(models)))
+
+# calculate metrics for each model
+for (i in 1:nrow(data)) {
+  tp <- data[i, "TP"]
+  tn <- data[i, "TN"]
+  fp <- data[i, "FP"]
+  fn <- data[i, "FN"]
+  
+  metrics[i, "Accuracy"] <- (tp + tn) / (tp + tn + fp + fn) # measures the proportion of correct predictions made by the model
+  metrics[i, "Precision"] <- tp / (tp + fp) # measures the proportion of true positive predictions out of all the positive predictions 
+  metrics[i, "Sensitivity"] <- tp / (tp + fn) # measures the proportion of true positive predictions out of all the actual positive cases
+  metrics[i, "F1_Score"] <- 2 * (metrics[i, "Precision"] * metrics[i, "Sensitivity"]) / (metrics[i, "Precision"] + metrics[i, "Sensitivity"])# a measure of the overall performance of the model
+  }
+
+metrics_df <- as.data.frame(metrics)
+metrics_df
+
+# Save the table to a CSV file
+write.table(metrics_df,
+            file = 'Tables/PerformanceMetrics.csv', sep = ",",
+            row.names = FALSE)
+
+```
+
+- *Accuracy: All models achieve relatively high accuracy, ranging from 86.96% (Naive Bayes) to 90.95% (Neural Network). This indicates that the models are generally effective in predicting the correct class labels.*
+
+- *Precision measures the proportion of true positives among all positive predictions made by the model.
+> Logistic Regression (LR) and Neural Network (NN) models achieve the highest precision at around 65%, indicating they are better at minimizing false positives.*
+
+- Sensitivity measures the proportion of actual positives that are correctly identified by the model.
+> Random Forest (RF) and Naive Bayes (NB) models achieve higher sensitivity compared to LR and DT, suggesting they are better at identifying true positives.
+
+- F1 Score is the harmonic mean of precision and recall, providing a balance between the two metrics.
+> RF model has the highest F1 score at 55.20%, indicating it strikes a good balance between precision and recall.
+
+
+**Model Selection Considerations:**
+> LR: Suitable when minimizing false positives is critical (high precision).
+> *RF: Balances well between precision and recall, making it robust across different evaluation metrics.*
+> NB: High sensitivity suggests it is effective in identifying actual positives.
+> DT: Similar performance to LR but slightly lower across all metrics.
+> NN: High accuracy and balanced metrics, suitable for complex nonlinear relationships.
+
+*Forecasting and Prediction:*
+- Depending on specific requirements (e.g., minimizing false positives, maximizing sensitivity), stakeholders can choose the appropriate model.
+- Consider model interpretability, computational efficiency, and scalability when deploying these models in operational settings.
+
+*Further Steps:*
+- Validate models on independent test sets to confirm robustness.
+- Conduct feature importance analysis to understand which predictors influence model predictions the most.
+- Fine-tune hyperparameters to potentially improve model performance further.
+
++ Sensitivity is an important metric when evaluating models for classification tasks where the positive class is relatively rare and given the present banking environment which favours more sensitive models, therefore it's preferable to generate more successful  sales even if it means losing some time contacting potential customers who ultimately would not subscribe.
+
++ Based on the sensitivity metric:
+> Naive Bayes (NB) seems to be the best choice among the listed models, with the highest sensitivity of 54.52%. This indicates that NB is better at correctly identifying actual positive cases (successful sales) compared to the other models listed.
+
+**Considerations:**
+> Precision vs. Sensitivity Trade-off: While NB has the highest sensitivity, its precision (44.55%) is lower compared to LR and NN. This means NB may identify more true positives (successful sales) but might also have a higher rate of false positives (incorrectly predicting a sale).
+
+> Model Complexity: NB is relatively simple and computationally efficient, which might be advantageous depending on deployment requirements.
+
+> Further Validation: It's essential to validate the NB model on an independent test set to ensure its robustness and performance consistency in real-world scenarios.
+
+*Given these insights, Naive Bayes (NB) appears to be the preferred choice for maximizing sensitivity in predicting successful sales in a banking environment, where capturing as many positive outcomes as possible is prioritized, even at the cost of potentially contacting more false positives.*
+
+```{r Predictive metric (MAE/ ME)}
+# MAE and ME evaluation: caret package 
+#(https://cran.r-project.org/web/packages/caret/index.html)
+
+# Calculate MAE and ME for each model
+mae_lr <- mean(abs(as.numeric(test$prediction_logistic) - as.numeric(test_set$y)))
+me_lr <- mean(as.numeric(as.character(test$prediction_logistic)) - as.numeric(as.character(test_set$y)))
+
+mae_rf <- mean(abs(as.numeric(test$prediction_rf) - as.numeric(test_set$y)))
+me_rf <- mean(as.numeric(as.character(test$prediction_rf)) - as.numeric(as.character(test_set$y)))
+
+mae_nb <- mean(abs(as.numeric(test$prediction_nb) - as.numeric(test_set$y)))
+me_nb <- mean(as.numeric(as.character(test$prediction_nb)) - as.numeric(as.character(test_set$y)))
+
+mae_dt <- mean(abs(as.numeric(test$prediction_CART) - as.numeric(test_set$y)))
+me_dt <- mean(as.numeric(as.character(test$prediction_CART)) - as.numeric(as.character(test_set$y)))
+
+mae_nn <- mean(abs(as.numeric(test$prediction_nn) - as.numeric(test_set$y)))
+me_nn <- mean(as.numeric(as.character(test$prediction_nn)) - as.numeric(as.character(test_set$y)))
+
+
+# Store results in a dataframe
+PredictiveMetric_df <- data.frame(Model = c("LR", "RF", "NB", "DT", "NN"),
+                        MAE = c(mae_lr, mae_rf, mae_nb, mae_dt, mae_nn ),
+                        ME = c(me_lr, me_rf, me_nb, me_dt, me_nn))
+PredictiveMetric_df
+
+# Save the table to a CSV file
+write.table(PredictiveMetric_df,
+            file = 'Tables/PredictiveMetrics.csv', sep = ",",
+            row.names = FALSE)
+```
+NB has the greatest  mean absolute error (MAE) and mean error (ME), which suggests that it has a poor specificity predictive performance compared to the other models. However, in context of this study, we are allowed room for errors given an increase in success ratio and profitabilty.
+ 
+## 6. Corporate Purpose,  limitations of the study and Conclusion.
+
+*Based on the confusion matrix result,* 
+- the company can evaluate the performance of the model and decide how to allocate its resources for the campaign efforts. 
+- For example, the company can prioritize its campaign on customers who are predicted to buy in to the service (TP) and customers who are likely to buy in but not predicted by the model (FN) in order to reduce campaign cost and increase revenue. 
+- On the other hand, the company can avoid targeting customers who are predicted not to buy in (TN) in order to reduce unnecessary costs.
+
+*Telemarketing Campaigns and Data-Driven Predictions:*
+
+- Telemarketing campaigns benefit from data-driven predictions of client subscription likelihood.
+- Assess model effectiveness to focus marketing efforts, increase profitability, and improve satisfaction.
+- Prioritize potential subscribers (TP) and avoid advertising to unlikely buyers (TN).
+- Consider business context, privacy, data quality, and market shifts for robust modeling.
+
+*Study Highlights:*
+- A data-driven decision support system (DSS) predicts telemarketing campaign outcomes.
+- Naive Bayes (NB) model selected with AUC of 0.728.
+- Feature selection ranks duration, month, and poutcome as key variables.
+- Results align with bank goals for successful sales and profitability.
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -3,14 +3,17 @@
 
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import recall_score, f1_score, classification_report, confusion_matrix, roc_auc_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-#from xgboost import XGBClassifier
-#from lightgbm import LGBMClassifier
-#from sklearn.ensemble import CatBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neural_network import MLPClassifier
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from catboost import CatBoostClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.dummy import DummyClassifier
 import matplotlib.pyplot as plt
@@ -26,6 +29,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 import random
 import numpy as np
+from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import RandomizedSearchCV
 
 
 # Set global seeds
@@ -40,7 +46,7 @@ def encode_dataframe(df, target_column):
         df_encoded[col] = LabelEncoder().fit_transform(df_encoded[col])
     return df_encoded
 
-def compute_random_forest_importance(df, target_column='churn', top_n=20, plot=True):
+def compute_random_forest_importance(df, target_column='y', top_n=20, plot=True):
     if df[target_column].dtype == 'object':
         if set(df[target_column].unique()) == {'yes', 'no'}:
             df[target_column] = df[target_column].map({'no': 0, 'yes': 1})
@@ -71,7 +77,7 @@ def compute_random_forest_importance(df, target_column='churn', top_n=20, plot=T
 
     return importance_df
 
-def compute_mutual_info(df, target_column='churn', top_n=20, plot=True):
+def compute_mutual_info(df, target_column='y', top_n=20, plot=True):
     if df[target_column].dtype == 'object':
         if set(df[target_column].unique()) == {'yes', 'no'}:
             df[target_column] = df[target_column].map({'no': 0, 'yes': 1})
@@ -98,7 +104,7 @@ def compute_mutual_info(df, target_column='churn', top_n=20, plot=True):
 
     return mi_df
 
-def compute_combined_feature_importance(df, target_column='churn', top_n=20, plot=True):
+def compute_combined_feature_importance(df, target_column='y', top_n=20, plot=True):
     rf_df = compute_random_forest_importance(df.copy(), target_column, top_n=top_n, plot=False)
     mi_df = compute_mutual_info(df.copy(), target_column, top_n=top_n, plot=False)
 
@@ -116,7 +122,7 @@ def compute_combined_feature_importance(df, target_column='churn', top_n=20, plo
 
     return merged_df
 
-def prepare_features(df, target_column='churn', drop_columns=None):
+def prepare_features(df, target_column='y', drop_columns=None):
     import pandas as pd
 
     df = df.copy()
@@ -144,7 +150,7 @@ def prepare_features(df, target_column='churn', drop_columns=None):
     return X, y
 
 
-def scale_and_split(df, target_column='churn', test_size=0.2, random_state=42):
+def scale_and_split(df, target_column='y', test_size=0.2, random_state=42):
     '''
     Scales and splits features returned by prepare_features.
 
@@ -175,7 +181,31 @@ def scale_and_split(df, target_column='churn', test_size=0.2, random_state=42):
     return X_train_scaled, X_test_scaled, y_train, y_test, pipeline
 
 
-from imblearn.over_sampling import SMOTE
+
+def scale_train_test(X_train, X_test):
+    """
+    Scales X_train and X_test using a pipeline with StandardScaler.
+
+    Parameters:
+    - X_train (pd.DataFrame or np.ndarray): Training features
+    - X_test (pd.DataFrame or np.ndarray): Testing features
+
+    Returns:
+    - X_train_scaled (np.ndarray): Scaled training features
+    - X_test_scaled (np.ndarray): Scaled test features
+    - pipeline (Pipeline): Fitted sklearn pipeline with StandardScaler
+    """
+    pipeline = Pipeline([
+        ('scaler', StandardScaler())
+    ])
+
+    X_train_scaled = pipeline.fit_transform(X_train)
+    X_test_scaled = pipeline.transform(X_test)
+
+    return X_train_scaled, X_test_scaled, pipeline
+
+
+
 
 def balance_classes_smote(X, y, random_state=42):
     '''
@@ -193,35 +223,47 @@ def balance_classes_smote(X, y, random_state=42):
     return X_res, y_res
 
 
-def train_and_evaluate_models(X, y, cv_splits=10):
+def train_and_evaluate_models(X, y, selected_models=None, cv_splits=10):
     """
-    Train models using cross validation scores to avoid overfitting
-    """    
-    models = {
+    Train selected models using cross-validation and return performance metrics.
+    
+    Parameters:
+    - X, y: Features and target
+    - selected_models (list of str): List of model names to train. If None, all models will be used.
+    - cv_splits (int): Number of StratifiedKFold splits
+
+    Returns:
+    - results (dict): Model evaluation metrics
+    - trained_models (dict): Fitted models
+    """
+
+    all_models = {
         "Dummy": DummyClassifier(strategy="most_frequent"),
         "Logistic Regression": LogisticRegression(max_iter=1000, class_weight="balanced"),
         "Random Forest": RandomForestClassifier(class_weight="balanced"),
-        #"KNN": KNeighborsClassifier(),
+        "KNN": KNeighborsClassifier(),
         "SVM": SVC(probability=True, class_weight="balanced"),
-       # "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric="logloss", scale_pos_weight=5),
-       # "CatBoost": CatBoostClassifier(verbose=0, class_weights=[1, 5]),  # Adjust weight if needed,
         "LightGBM": LGBMClassifier(class_weight="balanced"),
-        "Gradient Boosting": GradientBoostingClassifier()
-            }   
+        "Gradient Boosting": GradientBoostingClassifier(),
+        "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric="logloss", scale_pos_weight=5),
+        "CatBoost": CatBoostClassifier(verbose=0, class_weights=[1, 5]),  # Adjust weight if needed,
+        "Naive Bayes": GaussianNB(),
+        "Decision Tree": DecisionTreeClassifier(),
+        "Neural Network": MLPClassifier(hidden_layer_sizes=(50,), max_iter=1000)
+    }
+
+    # Filter models if user specifies a subset
+    models_to_run = {k: v for k, v in all_models.items() if (selected_models is None or k in selected_models)}
 
     results = {}
     trained_models = {}
-
     skf = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=42)
 
-    for name, model in models.items():
+    for name, model in models_to_run.items():
         print(f"Evaluating: {name}")
 
         y_pred = cross_val_predict(model, X, y, cv=skf)
-        if hasattr(model, "predict_proba"):
-            y_proba = cross_val_predict(model, X, y, cv=skf, method='predict_proba')[:, 1]
-        else:
-            y_proba = None
+        y_proba = cross_val_predict(model, X, y, cv=skf, method='predict_proba')[:, 1] if hasattr(model, "predict_proba") else None
 
         report = classification_report(y, y_pred, output_dict=True)
         auc_score = roc_auc_score(y, y_proba) if y_proba is not None else None
@@ -233,11 +275,14 @@ def train_and_evaluate_models(X, y, cv_splits=10):
             "roc_auc": auc_score
         }
 
-        # Fit model on entire data for final model use
+        # Train final model on full data
         model.fit(X, y)
         trained_models[name] = model
 
     return results, trained_models
+
+
+
 
 def results_to_dataframe(results_dict):
     '''
@@ -318,17 +363,104 @@ def plot_model_evaluations(models, X_test, y_test):
     plt.show()
 
 
+def load_models_and_params():
+    """
+    Loads a dictionary of models and their parameter distributions for RandomizedSearchCV.
 
-def tune_and_select_best_model(X_train, y_train, models_and_params, save_path="best_model.pkl"):
+    Returns:
+    - models_and_params (dict): {model_name: (model_instance, param_distributions)}
+    """
+    models_and_params = {
+        "Logistic Regression": (
+            LogisticRegression(max_iter=1000, class_weight='balanced'),
+            {
+                'C': [0.001, 0.01, 0.1, 1, 10],
+                'solver': ['liblinear', 'lbfgs']
+            }
+        ),
+        "Random Forest": (
+            RandomForestClassifier(class_weight='balanced'),
+            {
+                'n_estimators': [100, 200, 300],
+                'max_depth': [None, 10, 20, 30],
+                'min_samples_split': [2, 5, 10]
+            }
+        ),
+        "Decision Tree": (
+            DecisionTreeClassifier(class_weight='balanced'),
+            {
+                'max_depth': [None, 10, 20, 30],
+                'min_samples_split': [2, 5, 10],
+                'criterion': ['gini', 'entropy']
+            }
+        ),
+        "Naive Bayes": (
+            GaussianNB(),
+            {}  # No useful hyperparameters to tune
+        ),
+        "Neural Network": (
+            MLPClassifier(max_iter=1000),
+            {
+                'hidden_layer_sizes': [(50,), (100,), (100, 50)],
+                'activation': ['relu', 'tanh'],
+                'alpha': [0.0001, 0.001, 0.01]
+            }
+        ),
+        "SVM": (
+            SVC(probability=True, class_weight='balanced'),
+            {
+                'C': [0.1, 1, 10],
+                'kernel': ['linear', 'rbf', 'poly'],
+                'gamma': ['scale', 'auto']
+            }
+        ),
+        "KNN": (
+            KNeighborsClassifier(),
+            {
+                'n_neighbors': [3, 5, 7, 9],
+                'weights': ['uniform', 'distance']
+            }
+        ),
+        "LightGBM": (
+            LGBMClassifier(class_weight='balanced'),
+            {
+                'n_estimators': [100, 200, 300],
+                'learning_rate': [0.01, 0.05, 0.1],
+                'max_depth': [-1, 10, 20]
+            }
+        ),
+        "XGBoost": (
+            XGBClassifier(use_label_encoder=False, eval_metric='logloss', scale_pos_weight=5),
+            {
+                'n_estimators': [100, 200, 300],
+                'learning_rate': [0.01, 0.05, 0.1],
+                'max_depth': [3, 6, 10]
+            }
+        ),
+        "CatBoost": (
+            CatBoostClassifier(verbose=0, class_weights=[1, 5]),
+            {
+                'iterations': [100, 200, 300],
+                'learning_rate': [0.01, 0.05, 0.1],
+                'depth': [4, 6, 10]
+            }
+        )
+    }
+
+    return models_and_params
+
+
+
+def tune_and_select_best_model(X_train, y_train, models_and_params, model_to_tune=None, save_path="best_model.pkl"):
     '''
-    Tune given models using GridSearchCV and select the one with the highest Recall (1),
-    while reporting F1-score for transparency. Skips models that raise compatibility errors.
-
+    Tune a specified model using GridSearchCV and select the best estimator based on Recall.
+    
     Parameters:
     - X_train, y_train: Training data
     - models_and_params: dict of model name -> (model instance, param_grid)
+    - model_to_tune: (str) Optional. Name of the model to tune. If None, tunes all and selects best.
     - save_path: path to save the best model
-
+    
     Returns:
     - best_estimator: trained best model
     - best_name: name of the best model
@@ -340,34 +472,38 @@ def tune_and_select_best_model(X_train, y_train, models_and_params, save_path="b
     best_name = None
     best_scores = {}
 
-    for name, (model, param_grid) in models_and_params.items():
+    models_to_run = models_and_params if model_to_tune is None else {
+        model_to_tune: models_and_params[model_to_tune]
+    }
+
+    for name, (model, param_grid) in models_to_run.items():
         try:
             print(f"🔍 Tuning {name}...")
-            grid = GridSearchCV(model, param_grid, scoring='recall', cv=5, n_jobs=1, verbose=0, refit=True)
+            grid = GridSearchCV(model, param_grid, scoring='recall', cv=5, n_jobs=-1, verbose=0, refit=True)
             grid.fit(X_train, y_train)
 
-            recall_score = grid.best_score_
-            f1_grid = GridSearchCV(model, param_grid, scoring='f1', cv=5, n_jobs=1, verbose=0)
-            f1_grid.fit(X_train, y_train)
-            f1_score = f1_grid.best_score_
+            recall_best = grid.best_score_
 
-            print(f" {name} Best Recall: {recall_score:.4f} | F1: {f1_score:.4f} | Params: {grid.best_params_}")
+            # Recalculate F1 using the best estimator (not a separate grid search)
+            f1_best = f1_score(y_train, grid.predict(X_train))
 
-            if recall_score > best_recall:
-                best_recall = recall_score
+            print(f" ✅ {name} Best Recall: {recall_best:.4f} | F1: {f1_best:.4f} | Params: {grid.best_params_}")
+
+            if recall_best > best_recall:
+                best_recall = recall_best
                 best_model = grid.best_estimator_
                 best_name = name
-                best_scores = {"recall": recall_score, "f1": f1_score}
+                best_scores = {"recall": recall_best, "f1": f1_best}
 
         except Exception as e:
-            print(f"Skipping {name} due to error: {e}")
+            print(f"❌ Skipping {name} due to error: {e}")
 
     if best_model:
-        print(f" Selected Model: {best_name} | Recall: {best_scores['recall']:.4f} | F1: {best_scores['f1']:.4f}")
+        print(f"\n🏆 Selected Model: {best_name} | Recall: {best_scores['recall']:.4f} | F1: {best_scores['f1']:.4f}")
         joblib.dump(best_model, save_path)
-        print(f" Best model saved to {save_path}")
+        print(f"💾 Best model saved to: {save_path}")
     else:
-        print("No valid model could be tuned.")
+        print("⚠️ No valid model could be tuned.")
 
     return best_model, best_name, best_scores
 
