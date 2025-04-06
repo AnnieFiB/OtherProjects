@@ -137,3 +137,7 @@ https://mybinder.org/v2/gh/AnnieFiB/my-first-binder/HEAD
 
 
 https://github.com/orgs/AnnieThonia/repositories
+
+https://developer.x.com/en/portal/projects/1908861513114300417/apps/30522130/keys
+
+https://www.kaggle.com/discussions/getting-started/256014
