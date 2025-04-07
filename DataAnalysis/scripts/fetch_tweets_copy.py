@@ -11,6 +11,10 @@ from dotenv import load_dotenv
 import tweepy
 from tweepy import Client, TooManyRequests, Paginator
 import re
+from tweepy.errors import TweepyException, TooManyRequests, TwitterServerError, BadRequest
+from requests.exceptions import ConnectionError
+from typing import Optional
+
 from textblob import TextBlob
 from wordcloud import WordCloud
 from collections import Counter
@@ -28,17 +32,17 @@ from sklearn.svm import LinearSVC
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, f1_score
 import joblib
 
-
+class TwitterServerError(Exception):
+    pass
 
 from nltk.stem import WordNetLemmatizer
 lemmatizer = WordNetLemmatizer()
 
 # Load credentials
 load_dotenv()
-BEARER_TOKEN = os.getenv("X_BEARER_TOKEN")
-
-if not BEARER_TOKEN:
-    raise EnvironmentError(" Missing BEARER_TOKEN in .env file")
+bearer_token = os.getenv("X_BEARER_TOKEN")
+if not bearer_token:
+    raise ValueError("Missing X_BEARER_TOKEN in environment variables")
 
 # Create Tweepy Client
 client = tweepy.Client(bearer_token=BEARER_TOKEN)
@@ -106,47 +110,86 @@ def safe_read_csv(path):
             raise RuntimeError(f"❌ Failed to read CSV: {e}")
 
 
-def fetch_tweets(query, limit=100, max_results_per_call=50, wait_on_rate_limit=True):
+def fetch_tweet(
+    search_query: str,
+    max_results: int = 10,
+    tweet_fields: str = "author_id,created_at,text,public_metrics,lang",
+    expansions: str = None,
+    next_token: str = None,
+    verbose: bool = False,
+    max_retries: int = 3,
+    base_wait: int = 60
+) -> pd.DataFrame:
     """
-    Fetch tweets using Twitter API v2 with safe dev-time defaults.
-    
-    Args:
-        query (str): Twitter search query.
-        limit (int): Total number of tweets to fetch (default: 100).
-        max_results_per_call (int): Max results per API call (default: 50).
-        wait_on_rate_limit (bool): If True, pause briefly and retry on rate limit.
-    
-    Returns:
-        DataFrame: Tweet data with ID, text, date, and language.
+    Fetch tweets with rate limit handling and automatic retries.
     """
-    tweets = []
-    tweet_fields = ["created_at", "text", "lang", "id"]
-    
-    try:
-        paginator = Paginator(
-            client.search_recent_tweets,
-            query=query,
-            tweet_fields=tweet_fields,
-            max_results=max_results_per_call
-        ).flatten(limit=limit)
+    endpoint = "https://api.twitter.com/2/tweets/search/recent"
+    headers = {
+        "Authorization": f"Bearer {bearer_token}",
+        "User-Agent": "v2RecentSearchPython"
+    }
 
-        for tweet in paginator:
-            tweets.append({
-                "id": tweet.id,
-                "created_at": tweet.created_at,
-                "text": tweet.text,
-                "lang": tweet.lang
-            })
+    params = {
+        'query': search_query,
+        'max_results': max(min(max_results, 100), 10),
+        'tweet.fields': tweet_fields,
+    }
 
-    except TooManyRequests:
-        if wait_on_rate_limit:
-            print("Rate limit hit. Sleeping for 30 seconds... (dev mode)")
-            time.sleep(30)  # ↓↓↓ shorter wait for dev/testing
-            return fetch_tweets(query, limit, max_results_per_call, wait_on_rate_limit)
-        else:
-            raise
+    if expansions:
+        params['expansions'] = expansions
+    if next_token:
+        params['next_token'] = next_token
 
-    return pd.DataFrame(tweets)
+    retries = 0
+    last_status = 200
+
+    while retries <= max_retries:
+        try:
+            response = requests.get(endpoint, headers=headers, params=params)
+            
+            if response.status_code == 429:
+                # Handle rate limits with exponential backoff
+                retry_after = int(response.headers.get('Retry-After', base_wait * (2 ** retries)))
+                print(f"Rate limited. Waiting {retry_after} seconds (retry {retries + 1}/{max_retries})")
+                time.sleep(retry_after)
+                retries += 1
+                continue
+                
+            if response.status_code != 200:
+                raise Exception(f"API Error {response.status_code}: {response.text}")
+
+            json_response = response.json()
+            
+            if verbose:
+                print(json.dumps(json_response, indent=4, sort_keys=True))
+
+            # Process data
+            data = json_response.get('data', [])
+            meta = json_response.get('meta', {})
+            
+            df = pd.DataFrame(data)
+            
+            if not df.empty:
+                df['created_at'] = pd.to_datetime(df['created_at'])
+                if 'public_metrics' in df.columns:
+                    metrics_df = pd.json_normalize(df['public_metrics'])
+                    df = df.drop('public_metrics', axis=1).join(metrics_df)
+            
+            df.attrs['next_token'] = meta.get('next_token')
+            return df
+
+        except requests.exceptions.RequestException as e:
+            if retries < max_retries:
+                wait_time = base_wait * (2 ** retries)
+                print(f"Connection error: {e}. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+                retries += 1
+            else:
+                raise
+
+    raise Exception(f"Failed after {max_retries} retries. Last status: {last_status}")
+
+
 
 def save_to_csv(df, filename="tweets.csv"):
     """
