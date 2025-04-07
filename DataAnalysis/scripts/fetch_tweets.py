@@ -1,5 +1,5 @@
 # fetch_tweets.py
-
+import data_processing_framework as dpf
 import os
 import time
 import requests
@@ -63,7 +63,7 @@ def load_tweets(interactive=True, query=None, csv_path=None, limit=450):
     if interactive:
         print("\n🔍 How would you like to load tweets?")
         print("1. Fetch from Twitter API")
-        print("2. Load from CSV")
+        print("2. Load from Kaggle")
         choice = input("Enter 1 or 2: ").strip()
 
         if choice == "1":
@@ -73,24 +73,25 @@ def load_tweets(interactive=True, query=None, csv_path=None, limit=450):
             return fetch_tweets(query=query, cooldown=True)
 
         elif choice == "2":
-            csv_path = input("Enter path to CSV file (e.g. 'data/cleaned/immigration.csv'): ").strip()
-            if not os.path.isfile(csv_path):
-                raise FileNotFoundError(f"❌ File not found: {csv_path}")
-            print(f"Loaded tweets from {csv_path}")
-            return safe_read_csv(csv_path)
-
+            # Get dataset and handle None case
+            df = dpf.fetch_kaggle_dataset(search_query="sentiment140")
+            if df is None:
+                raise ValueError("❌ No datasets found for search query 'tweets_labeled'")
+                   
+            print(f"✅ Loaded {len(df)} tweets from Kaggle dataset")
+            return df
+            
         else:
             raise ValueError("Invalid choice. Please enter 1 or 2.")
 
     else:
-        # Non-interactive mode
+        # Non-interactive mode remains unchanged
         if query:
             return fetch_tweets(query=query, cooldown=True)
         elif csv_path:
             if not os.path.isfile(csv_path):
                 raise FileNotFoundError(f"❌ File not found: {csv_path}")
             return safe_read_csv(csv_path)
-
         else:
             raise ValueError("Provide either `query` or `csv_path`.")
 

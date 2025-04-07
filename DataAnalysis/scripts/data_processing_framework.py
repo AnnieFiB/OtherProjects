@@ -123,7 +123,25 @@ def fetch_kaggle_dataset(search_query="human resources"):
 
     # Load the file based on its type
     if file_ext == ".csv":
-        data = pd.read_csv(file)
+        # List of encodings to try (order matters)
+        encodings_to_try = ['utf-8', 'latin1', 'iso-8859-1', 'cp1252', 'utf-16']
+        
+        for encoding in encodings_to_try:
+            try:
+                # Reset file pointer for each attempt
+                file.seek(0)
+                data = pd.read_csv(file, encoding=encoding)
+                print(f"✅ Successfully read with {encoding} encoding")
+                break
+            except UnicodeDecodeError:
+                print(f"⚠️  Failed to read with {encoding} encoding, trying next...")
+                continue
+        else:
+            raise ValueError(
+                "❌ Failed to decode CSV file. Tried encodings: " + 
+                ", ".join(encodings_to_try) + 
+                "\nPlease manually inspect the file encoding."
+            )
     elif file_ext == ".xlsx":
         data = pd.read_excel(file)
     elif file_ext == ".json":
