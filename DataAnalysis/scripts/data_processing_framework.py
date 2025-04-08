@@ -206,17 +206,17 @@ def clean_data(df, config, missing_strategy='fill'):
     Parameters:
         missing_strategy: 'fill' (default) or 'drop'
     """
-    print(f"\n🚀 Starting cleaning (missing strategy: {missing_strategy})...")
+    print(f"\nStarting cleaning (missing strategy: {missing_strategy})...")
     
     # 1. Remove irrelevant columns
     df = df.drop(columns=config['irrelevant_cols'])
-    print(f"✅ Removed {len(config['irrelevant_cols'])} irrelevant columns")
+    print(f"Removed {len(config['irrelevant_cols'])} irrelevant columns")
     
     # 2. Process dates
     if config['date_cols']:
         for col in config['date_cols']:
             df[col] = pd.to_datetime(df[col], errors='coerce')
-        print(f"📅 Processed {len(config['date_cols'])} date columns")
+        print(f" Processed {len(config['date_cols'])} date columns")
     
     # 3. Handle missing values
     original_rows = len(df)
