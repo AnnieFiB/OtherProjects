@@ -8,7 +8,7 @@ import time
 import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
-from kaggle.api.kaggle_api_extended import KaggleApi
+#from kaggle.api.kaggle_api_extended import KaggleApi
 import requests
 from io import StringIO
 from zipfile import ZipFile
