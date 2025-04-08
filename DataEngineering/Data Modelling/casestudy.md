@@ -1,6 +1,6 @@
 
 ---
-# **Case Study -  Zulo Bank : Database & Datawarehouse  Modelling**
+# ![Alt.text](assets/banklogo) **Case Study -  Zulo Bank : Database & Datawarehouse  Modelling**
 ---
 ## **Executive Summary**
 
