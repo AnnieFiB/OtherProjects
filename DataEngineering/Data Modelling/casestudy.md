@@ -1,7 +1,10 @@
 
 ---
-# ![Bank Logo](../assets/banklogo.png)
-**Case Study -  Zulo Bank : Database Design & Datawarehouse  Modelling**
+<p align="center">
+  <img src="../assets/banklogo.png" alt="Bank Logo" width="200"/>
+</p>
+
+# **Case Study -  Zulo Bank : Database Design & Datawarehouse  Modelling**
 ---
 ## **Executive Summary**
 
