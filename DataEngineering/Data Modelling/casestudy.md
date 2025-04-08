@@ -14,7 +14,7 @@
 ## **Benefits**
 
 
-## **Tech Stack
+## **Tech Stack**
 - Python : 
 - Draw.io :
 
