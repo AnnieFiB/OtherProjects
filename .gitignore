@@ -1,5 +1,38 @@
 .env
-myenv/
-__pycache__/
-.vscode/
 .streamlit/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+**/.ipynb_checkpoints
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# VSCode settings
+.vscode/
+
+# Virtual environments
+myenv/
+
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Jupyter runtime
+*.nbconvert.ipynb
+
+# Output or temp data
+*.log
+*.tmp
+*.bak
+outputs/
+results/
+*.csv
+*.xlsx
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
