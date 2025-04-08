@@ -1,38 +1,27 @@
-
----
 <p align="center">
-  <img src="../assets/banklogo.png" alt="Bank Logo" width="200"/>
+  <img src="../assets/banklogo.png" alt="Bank Logo" width="150"/>
+</p>
+
 <h1 align="center"><strong>Case Study - Zulo Bank: Database Design & Datawarehouse Modelling</strong></h1>
-  
-## **Executive Summary**
-
-
-## **Business Problem Statement**
-
-
-## **Objectives**
-
-
-## **Benefits**
-
-
-## **Tech Stack**
-- Python : 
-- Draw.io :
-
-## **Project Scope**
-
-
-## **Dataset**
 
 ---
 
-## **Database Modelling**
+## Project Overview
+- [Executive Summary](#executive-summary)
+- [Business Problem Statement](#business-problem-statement)
+- [Objectives](#objectives)
+- [Benefits](#benefits)
 
+---
+
+## Tools & Technologies
+- **Python**
+- **Draw.io**
 
 ---
 
-## **Datawarehouse Modelling**
-
-
----
+## Project Breakdown
+- [Project Scope](#project-scope)
+- [Dataset](#dataset)
+- [Database Modelling](#database-modelling)
+- [Datawarehouse Modelling](#datawarehouse-modelling)
