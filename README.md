@@ -16,6 +16,7 @@
 │   ├── airflow_dags/   # Orchestration workflows
 │   ├── spark_jobs/     # PySpark/Scala processing
 │   └── pipelines/      # ETL pipeline configurations # Key Learning Project (end-to-end implementation)
+|   └── Data Models/    # Database Designs and Datawarehouse Modelling
 ├── KLP/                
 │   ├── documentation/  # Technical specs & diagrams
 │   ├── datasets/           
@@ -60,6 +61,7 @@ sqldf("SELECT * FROM df WHERE age > 30")
 
  Feature                        | Description |
 |------------------------------|------------------------------|
+| **Datam Models**             | Databse desing and modelling , Datawarehousing modelling |
 | **Airflow**                  | DAGs for workflow orchestration |
 | **Spark**                    | Distributed processing jobs |
 | **Data Quality**             | Great Expectations validations |
