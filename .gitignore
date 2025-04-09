@@ -14,7 +14,7 @@ __pycache__/
 
 # Virtual environments
 myenv/
-
+.virtual_documents/
 
 # Python bytecode
 __pycache__/
