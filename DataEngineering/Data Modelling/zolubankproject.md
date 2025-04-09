@@ -54,9 +54,11 @@
 
 ## 5. Tech Stack
 - **PostgreSQL + pgAdmin** – Design and manage a normalized relational database using PostgreSQL, with pgAdmin for schema creation, queries, and data inspection
+- *SQL (Structured Query Language)*
 - **Data Warehouse Modeling**– Build a star schema optimized for analytics, with fact and dimension tables supporting BI use cases
 - **Draw.io** – Visualize ERDs and warehouse schemas to clearly document data structures and relationships
-- **Python (optional) – For scripting ETL workflows or data preparation if needed**
+- **Python** – For scripting ETL workflows, data processing, analysis, and synthetic data generation. Python's extensive
+libraries (Pandas) facilitate efficient data manipulation for testing and development.
 
 *This stack supports the complete project lifecycle, from schema design to data warehouse deployment, within the Zulo Bank case study.*
 
@@ -66,6 +68,8 @@
 - **Database Design:** Build a normalized relational schema capturing core banking data entities — `customers`, `accounts`, `transactions`, `loans`  — using 3NF for data integrity and reduced redundancy.
 - **Data Warehouse Modeling:** Convert the normalized schema into a star schema with a central fact table and surrounding dimension tables to enable high-performance analytics.
 - **Diagramming & Documentation:** Use Draw.io to generate ERDs and schema diagrams that communicate structure, relationships, and data flows.
+- **Python Programming:** Develop python codes to ingest data, transform it and load it into the PostgreSQL database
+- **Version Control:** Carry out good version control practice but using Git Desktop to Push and pull files from our local repository to git repository
   
 *This scope outlines the full data modeling lifecycle — from relational design to warehouse transformation — specific to the operational and analytical needs of Zulo Bank.*
 
