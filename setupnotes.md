@@ -144,6 +144,7 @@ https://www.kaggle.com/discussions/getting-started/256014
 
 
 git status              
-git add DataAnalysis
-git commit -m "Credit card prediction updated"
+git add DataEngineering/DataModelling
+git commit -m "etl(oltp) commitd"
+git commit -m "yanki e-comm ETL cmpltd (PostgreSQL)"
 git push                 
