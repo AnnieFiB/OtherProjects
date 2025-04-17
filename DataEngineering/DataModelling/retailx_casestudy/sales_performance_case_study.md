@@ -13,7 +13,7 @@ The company specializes in delivering **data-driven insights** through intuitive
 
 ---
 
-## 🧠 Problem Statement
+## Problem Statement
 
 A **retail company** wants to explore its historical sales data to better understand product and regional performance. Key business questions include:
 
