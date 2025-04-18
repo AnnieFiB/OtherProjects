@@ -108,3 +108,15 @@ The project aimed to uncover data-driven insights for RetailX by addressing inef
 
 ##  Conclusion
 The analysis delivers actionable insights that address the original problem statement—helping RetailX overcome fragmented data and gain visibility into **what sells, who buys, when, and where**. These insights lay the foundation for data-driven decisions in **marketing**, **inventory planning**, and **customer engagement**.
+
+## Restoring the PostgreSQL Database from a `.backup` File
+
+To restore a `.backup` file (custom format), ensure:
+
+- PostgreSQL is installed and running
+- The `pg_restore` tool is available in your terminal
+- You know the PostgreSQL username (postgres) and have appropriate access
+
+```bash
+pg_restore -U your_user -C -d postgres retailx_backup_2024_04_17.backup
+
