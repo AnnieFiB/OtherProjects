@@ -13,7 +13,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.neural_network import MLPClassifier
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
-#from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.dummy import DummyClassifier
 import matplotlib.pyplot as plt
@@ -246,7 +246,7 @@ def train_and_evaluate_models(X, y, selected_models=None, cv_splits=10):
         "LightGBM": LGBMClassifier(class_weight="balanced"),
         "Gradient Boosting": GradientBoostingClassifier(),
         "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric="logloss", scale_pos_weight=5),
-        #"CatBoost": CatBoostClassifier(verbose=0, class_weights=[1, 5]),  # Adjust weight if needed,
+        "CatBoost": CatBoostClassifier(verbose=0, class_weights=[1, 5]),  # Adjust weight if needed,
         "Naive Bayes": GaussianNB(),
         "Decision Tree": DecisionTreeClassifier(),
         "Neural Network": MLPClassifier(hidden_layer_sizes=(50,), max_iter=1000)
