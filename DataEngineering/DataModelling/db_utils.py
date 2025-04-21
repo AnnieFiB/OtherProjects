@@ -2,23 +2,32 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any
-import psycopg2
+from typing import Dict, List, Tuple, Optional, Any, Union 
 from collections import defaultdict, deque
 import re
-import os
+import os, shutil
+import builtins
 import psycopg2
+from psycopg2 import sql
 from dotenv import load_dotenv
 import holidays
 import warnings
 from datetime import datetime, timedelta
-from config import ETL_CONFIG
+from sourceconfig import ETL_CONFIG
+from graphviz import Digraph
 from IPython.display import display, HTML
 import ipywidgets as widgets
 import io
 import argparse
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
+import kaggle
+from io import BytesIO
+from kaggle.api.kaggle_api_extended import KaggleApi
+import zipfile
+from graphviz import Digraph
+os.environ["PATH"] += os.pathsep + r"C:\Program Files\Graphviz\bin"
 
 
 load_dotenv() # Load environment variables from .env file
@@ -72,45 +81,90 @@ def get_db_connection(env_prefix: str = "DB_") -> psycopg2.extensions.connection
 # === DATA READ & EXTRACTION ===
 
 def read_data(source: str, source_type: str = 'auto') -> pd.DataFrame:
-    """
-    Reads a CSV file from local path, Google Drive ID, or URL.
-    
-    Parameters:
-    - source: file path, GDrive ID, or URL
-    - source_type: 'file', 'gdrive', 'url', or 'auto'
-    
-    Returns:
-    - pd.DataFrame
-    """
     if source_type == 'auto':
         if source.startswith(('http://', 'https://')):
             source_type = 'url'
         elif os.path.isfile(source):
             source_type = 'file'
+        elif "/" in source:
+            source_type = 'kaggle'
         else:
-            source_type = 'gdrive'  # fallback
-    
+            source_type = 'gdrive'
+
     try:
         if source_type == 'file':
             print(f"📂 Loading local file: {source}")
             return pd.read_csv(source)
-        
-        elif source_type == 'gdrive':
-            gdrive_url = f"https://drive.google.com/uc?id={source}"
-            print(f"🔗 Loading from Google Drive ID: {source}")
-            return pd.read_csv(gdrive_url)
 
         elif source_type == 'url':
             print(f"🌐 Loading from URL: {source}")
             return pd.read_csv(source)
 
-    except Exception as e:
-        raise ValueError(f"❌ Failed to load CSV: {e}")
+        elif source_type == 'gdrive':
+            gdrive_url = f"https://drive.google.com/uc?id={source}"
+            print(f"🔗 Loading from Google Drive ID: {source}")
+            return pd.read_csv(gdrive_url)
 
-# df = read_data("data.csv")  # Local file
-# df = read_data("1DdmNsrdBRLfzBdgtvzvFHZ7ejFpLlpwW", "gdrive")  # Google Drive
-# df = read_data("https://example.com/data.csv")  # URL (auto-detected)
-# df.head()
+        #elif source_type == 'kaggle':
+           # return fetch_kaggle_dataset_by_path(source)
+
+    except Exception as e:
+        raise ValueError(f"❌ Failed to load data: {e}")
+    
+def fetch_kaggle_dataset_by_path(path: str, temp_dir=".temp_kaggle") -> dict:
+    """
+    Downloads a Kaggle dataset using a known path and lets the user pick the file to load.
+    Sets `raw_df` and `dataset_key` globally once loaded.
+    """
+  
+    result = {"raw_df": None, "selected_source": None}
+
+    print(f"📦 Loading Kaggle dataset using search: {path}")
+    
+    os.makedirs(temp_dir, exist_ok=True)
+    kaggle.api.authenticate()
+    kaggle.api.dataset_download_files(path, path=temp_dir, unzip=True)
+
+    csv_files = [f for f in os.listdir(temp_dir) if f.endswith(".csv")]
+    if not csv_files:
+        print("❌ No CSV files found.")
+        return result
+
+    dropdown = widgets.Dropdown(
+        options=csv_files,
+        description="Select File:"
+    )
+    load_button = widgets.Button(description="📥 Load Selected File")
+    output = widgets.Output()
+
+    def load_file_callback(_):
+        with output:
+            selected_file = dropdown.value
+            file_path = os.path.join(temp_dir, selected_file)
+            try:
+                df = pd.read_csv(file_path)
+                result["raw_df"] = df
+                result["selected_source"] = path
+
+                # Set global vars
+                builtins.raw_df = df
+                builtins.dataset_key = [k for k, v in ETL_CONFIG["data_sources"].items() if v.get("path") == path][0]
+                builtins.cfg = ETL_CONFIG["data_sources"][builtins.dataset_key]
+
+                print(f"✅ Loaded: {selected_file}")
+                print("📊 Shape:", df.shape)
+                display(df.head(3))
+                display(df.info())
+                print("\n✅ You can now access raw_df, dataset_key, and cfg globally.")
+
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                print(f"❌ Failed to load data: {e}")
+
+    load_button.on_click(load_file_callback)
+    display(dropdown, load_button, output)
+    print("🔄 Please select a file to load.")
+   
 
 # ============================= DATA TRANSFORMATION (CLEANING)  =============================================
 
@@ -161,7 +215,6 @@ def remove_duplicates(df: pd.DataFrame, key_cols: Optional[List[str]] = None) ->
     print(f"[remove_duplicates] Removed {before - len(df)} duplicate row(s) based on {reason}.")
     return df
 
-
 # 4. Standardize Categorical Fields
 def standardize_categoricals(df: pd.DataFrame, categorical_cols: Optional[List[str]] = None) -> pd.DataFrame:
     if categorical_cols is None:
@@ -182,20 +235,34 @@ def verify_key_relationships(df: pd.DataFrame, fk_cols: List[str]) -> pd.DataFra
 
 # 6. Split Compound Columns (e.g., Customer_Name → First, Last)
 def split_compound_column(df: pd.DataFrame, col: str, new_cols: List[str]) -> pd.DataFrame:
-    if col in df.columns:
-        split_data = df[col].astype(str).str.strip().str.split(pat=' ', n=1, expand=True)
-
-        # Fill missing parts with ''
-        split_data = split_data.fillna('')
-
-        # Ensure all new_cols are assigned properly
-        for i, new_col in enumerate(new_cols):
-            df[new_col] = split_data[i] if i < split_data.shape[1] else ''
-        
-        print(f"[split_compound_column] ✅ Split '{col}' into {new_cols}")
-        #print(df[new_cols].head(3))  # Show preview
-    else:
+    if col not in df.columns:
         print(f"[split_compound_column] ⚠️ Column '{col}' not found in DataFrame.")
+        return df
+
+    max_parts = len(new_cols)
+    tokens = df[col].astype(str).str.strip().str.split()
+
+    # Initialize empty target columns
+    for new_col in new_cols:
+        df[new_col] = ""
+
+    for i, row in df.iterrows():
+        parts = tokens[i] if isinstance(tokens[i], list) else []
+
+        if not parts:
+            continue
+
+        if len(parts) <= max_parts:
+            # Simple left-to-right assignment (e.g., name: First Middle Last)
+            for j in range(len(parts)):
+                df.at[i, new_cols[j]] = parts[j]
+        else:
+            # For long strings (e.g., address): assign rightmost parts last → zip/state/city
+            for j in range(1, max_parts):
+                df.at[i, new_cols[-j]] = parts[-j]
+            df.at[i, new_cols[0]] = " ".join(parts[:-max_parts + 1])
+
+    print(f"[split_compound_column] ✅ Split '{col}' into {new_cols}")
     return df
 
 # 7. Validate Contact Info (basic cleaning)
@@ -238,15 +305,18 @@ def standardize_column_names(df: pd.DataFrame) -> pd.DataFrame:
         if '_' in name:
             return name.lower()
         # Convert to snake_case
-        name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-        name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name)
-        name = re.sub(r'[\s\-]+', '_', name)
+        name = re.sub(r"[\s\-]+", "_", name)  # Replace spaces and hyphens with underscore
+        name = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)  # camelCase to snake
+        name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)  # PascalCase to snake
+        name = re.sub(r"__+", "_", name)  # Collapse multiple underscores
+        name = re.sub(r"[^\w_]", "", name)  # Remove non-alphanumeric
+
         return name.lower()
 
     df.columns = [clean_name(col) for col in df.columns]
     return df
 
-# === 10. Compute Interest based on principal and rate columns ===
+# 10. Compute Interest based on principal and rate columns
 def compute_interest(df: pd.DataFrame, principal_col: str, rate_col: str, new_col: str = 'computed_interest') -> pd.DataFrame:
     """
     Compute simple interest and add as a new column.
@@ -256,7 +326,6 @@ def compute_interest(df: pd.DataFrame, principal_col: str, rate_col: str, new_co
         df[new_col] = (df[principal_col] * df[rate_col] / 100).round(2)
         print(f"[compute_interest] ✅ Computed '{new_col}' from {principal_col} * {rate_col} / 100")
     return df
-
 
 # helper ETL function for processing a single data source
 def process_data_source(df: pd.DataFrame, source_name: str, source_config: dict) -> Tuple[str, pd.DataFrame]:
@@ -268,13 +337,13 @@ def process_data_source(df: pd.DataFrame, source_name: str, source_config: dict)
     
     df = ensure_correct_dtypes(df, source_config.get("date_columns"))
 
-    # ✅ Use the flexible duplicate remover — all columns by default
-    df = remove_duplicates(df)
-
      # 3. Core transformations — use optional fallbacks
     if "missingvalue_columns" in source_config:
         df = handle_missing_critical(df, source_config["missingvalue_columns"])
-
+        
+     # ✅ Use the flexible duplicate remover — all columns by default
+    #df = remove_duplicates(df)
+  
     # 2. Optional: Split compound name fields
     for col, new_cols in source_config.get("split_columns", {}).items():
         if col in df.columns:
@@ -294,23 +363,65 @@ def process_data_source(df: pd.DataFrame, source_name: str, source_config: dict)
     print(f"✅ Finished processing: {source_name} — {df.shape[0]} rows, {df.shape[1]} columns")
     return source_name, df
 
-# ===  GET NORMALIZED OLTP TABLES ===
+
+# =========================  GET NORMALIZED OLTP TABLES post sort =======================
+def topological_sort_tables(
+    tables: Dict[str, pd.DataFrame],
+    foreign_keys: Dict[str, List[Tuple[str, str, str]]]
+) -> List[str]:
+    """
+    Performs topological sorting of tables based on FK dependencies.
+
+    Correctly builds the graph such that a table appears only after the tables
+    it depends on (i.e., those it references via foreign keys).
+
+    Parameters:
+    - tables: dict of table_name -> DataFrame
+    - foreign_keys: dict of table_name -> list of (fk_col, ref_table, ref_col)
+
+    Returns:
+    - sorted list of table names respecting FK dependency order
+    """
+    graph = defaultdict(set)       # key: table, value: set of tables it points to (depends on)
+    in_degree = defaultdict(int)   # key: table, value: number of incoming dependencies
+
+    # Initialize graph
+    for table in tables:
+        graph[table] = set()
+        in_degree[table] = 0
+
+    # Build edges: from_table depends on to_table
+    for from_table, fks in foreign_keys.items():
+        for _, to_table, _ in fks:
+            if to_table not in graph[from_table]:
+                graph[from_table].add(to_table)
+                in_degree[to_table] += 1
+
+    # Topological sort (Kahn's algorithm)
+    queue = deque([t for t in tables if in_degree[t] == 0])
+    sorted_tables = []
+
+    while queue:
+        node = queue.popleft()
+        sorted_tables.append(node)
+        for dependent in graph[node]:
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                queue.append(dependent)
+
+    if len(sorted_tables) != len(tables):
+        raise ValueError("Cycle detected or missing dependencies in FK graph.")
+
+    return sorted_tables
+
 def split_normalized_tables(
     df: pd.DataFrame,
     table_specs: Dict[str, List[str]],
     critical_columns: Dict[str, List[str]] = None
 ) -> Dict[str, pd.DataFrame]:
     """
-    Splits raw df into normalized tables.
-    Drops rows with nulls in critical columns (e.g. PKs).
-    
-    Parameters:
-    - df: preprocessed DataFrame
-    - table_specs: table name → list of columns
-    - critical_columns: table name → list of required columns (e.g. PKs)
-    
-    Returns:
-    - Dict of table_name → cleaned DataFrame
+    Splits raw DataFrame into normalized tables based on table specs.
+    Only drops rows with nulls in critical columns, and deduplicates full records only.
     """
     critical_columns = critical_columns or {}
     tables = {}
@@ -323,92 +434,148 @@ def split_normalized_tables(
             continue
 
         table_df = df[selected].copy()
-        before = len(table_df)
+        original_count = len(table_df)
 
-        # Drop rows with nulls in required (critical) fields
-        crits = critical_columns.get(table, [])
+        # Drop rows with nulls in any critical columns
+        crits = [c for c in critical_columns.get(table, []) if c in table_df.columns]
         if crits:
-            crits = [c for c in crits if c in table_df.columns]
+            before_null = len(table_df)
             table_df = table_df.dropna(subset=crits)
+            after_null = len(table_df)
+            print(f"🔍 '{table}': Dropped {before_null - after_null} rows with nulls in {crits}")
 
-        # Drop full duplicates and reset index
+        # Drop FULL duplicate rows only (no subset deduping)
+        before_dedup = len(table_df)
         table_df = table_df.drop_duplicates().reset_index(drop=True)
-        after = len(table_df)
+        after_dedup = len(table_df)
+        print(f"🧹 '{table}': Removed {before_dedup - after_dedup} full duplicate rows")
 
-        print(f"✅ Created '{table}': {after} rows ({before - after} removed: nulls/dupes)")
-
+        print(f"✅ Created '{table}': {after_dedup} rows (from {original_count})")
         tables[table] = table_df
 
     return tables
 
-# ===== checks if pk exists in splitted tables & creates if it doesnt === #
+# =========================== checks if pk exists in splitted tables & creates if it doesnt === #
 def generate_index_pks(
-    tables: dict,
+    df: pd.DataFrame,
+    table_mapping: Dict[str, List[str]],
     pk: dict = None,
     critical_columns: dict = None
-) -> dict:
+) -> Tuple[pd.DataFrame, Dict[str, List[str]]]:
     """
-    Infers or generates a single primary key per table.
+    Enforces exactly one primary key per table in the format <table>_id.
+    Treats all other *_id fields as foreign keys.
 
-    Rules:
-    - First try: use provided critical_columns (must exist in table and be unique)
-    - Special case: 'date_dim' → 'date_id'
-    - Then try: singular(table_name) + '_id' (must be unique)
-    - Otherwise: generate synthetic key '<singular>_id'
-
-    Parameters:
-    - tables: dict of table_name → DataFrame
-    - pk: optional existing PK dict
-    - critical_columns: dict of table_name → list of critical column names
+    - Uses critical column if unique
+    - Falls back to existing <table>_id if unique
+    - Otherwise generates <table>_id as synthetic key
 
     Returns:
-    - Updated pk dict
+    - updated_df: modified DataFrame with guaranteed PK column
+    - pk_dict: {table_name: [<table>_id]}
     """
     pk = pk or {}
     critical_columns = critical_columns or {}
+    updated_df = df.copy()
 
-    for table_name, df in tables.items():
+    for table_name, columns in table_mapping.items():
         if table_name in pk and pk[table_name]:
             continue
 
-        # 1. Special case: date_dim → date_id
-        if table_name == "date_dim" and "date_id" in df.columns and df["date_id"].is_unique:
+        singular = table_name[:-1] if table_name.endswith("s") else table_name
+        enforced_pk_col = f"{singular}_id"
+
+        # Special case: date_dim → date_id
+        if table_name == "date_dim" and "date_id" in updated_df.columns and updated_df["date_id"].is_unique:
             pk[table_name] = ["date_id"]
             print(f"✅ Inferred PK for 'date_dim': date_id")
             continue
 
-        # 2. Use critical_columns if provided
+        # Priority 1: critical columns
         criticals = critical_columns.get(table_name, [])
         for col in criticals:
-            if col in df.columns and df[col].is_unique:
-                pk[table_name] = [col]
-                print(f"✅ Inferred PK for '{table_name}' from critical_columns: {col}")
+            if col in updated_df.columns and updated_df[col].is_unique:
+                if col != enforced_pk_col:
+                    updated_df[enforced_pk_col] = updated_df[col]
+                    print(f"🧭 Copied PK from {col} → {enforced_pk_col}")
+                pk[table_name] = [enforced_pk_col]
                 break
-        if table_name in pk:
-            continue
 
-        # 3. Singular name rule: <table>[:-1]_id
-        singular_name = table_name[:-1] if table_name.endswith("s") else table_name
-        expected_col = f"{singular_name}_id"
+        # Priority 2: existing enforced_pk_col if already unique
+        if table_name not in pk:
+            if enforced_pk_col in updated_df.columns and updated_df[enforced_pk_col].is_unique:
+                pk[table_name] = [enforced_pk_col]
+                print(f"✅ Using existing {enforced_pk_col} as PK for {table_name}")
+            else:
+                # Priority 3: generate synthetic key
+                print(f"⚠️ Generating synthetic PK '{enforced_pk_col}' for '{table_name}'")
+                updated_df = updated_df.reset_index(drop=True)
+                updated_df[enforced_pk_col] = range(1, len(updated_df) + 1)
+                updated_df[enforced_pk_col] = updated_df[enforced_pk_col].astype("Int64")
+                pk[table_name] = [enforced_pk_col]
 
-        if expected_col in df.columns and df[expected_col].is_unique:
-            pk[table_name] = [expected_col]
-            print(f"✅ Inferred PK for '{table_name}': {expected_col}")
-            continue
+    return updated_df, pk
 
-        # 4. Generate synthetic PK
-        synthetic_col = f"{singular_name}_id"
-        print(f"⚠️ No valid PK found for '{table_name}'. Generating synthetic: '{synthetic_col}'")
+def enforce_foreign_keys(
+    temp_tables: Dict[str, pd.DataFrame],
+    pk_dict: Dict[str, List[str]],
+    foreign_keys: Union[List[Dict[str, str]], Dict[str, List[Tuple[str, str, str]]]],
+    return_fk_dict: bool = True
+) -> Tuple[Dict[str, pd.DataFrame], Dict[str, List[Tuple[str, str, str]]]]:
+    """
+    Enforces FK rules using config or tuple-based FK dictionary.
+    Adds FK placeholder columns to source tables and builds a normalized fk_dict.
+    
+    Supports:
+    - foreign_keys as a list of dicts (from config)
+    - or as a dict of (fk_col, ref_table, ref_col) tuples
 
-        df = df.reset_index(drop=True)
-        df[synthetic_col] = range(1, len(df) + 1)
-        df = df[[synthetic_col] + [col for col in df.columns if col != synthetic_col]]
-        df[synthetic_col] = df[synthetic_col].astype("Int64")
+    Returns:
+    - updated temp_tables
+    - fk_dict: {from_table: [(fk_col, to_table, to_col)]}
+    """
+    fk_dict = {}
 
-        tables[table_name] = df
-        pk[table_name] = [synthetic_col]
+    if isinstance(foreign_keys, dict):
+        # Already normalized tuple-based format
+        for from_tbl, fk_list in foreign_keys.items():
+            for fk_col, to_tbl, to_col in fk_list:
+                if from_tbl == to_tbl and fk_col in pk_dict.get(from_tbl, []):
+                    print(f"⏩ Skipping self-referencing PK FK: {from_tbl}.{fk_col}")
+                    continue
 
-    return pk
+                if fk_col not in temp_tables.get(from_tbl, {}).columns:
+                    temp_tables[from_tbl][fk_col] = pd.Series(dtype="Int64")
+                    print(f"➕ FK column '{fk_col}' added to '{from_tbl}'")
+
+                fk_dict.setdefault(from_tbl, []).append((fk_col, to_tbl, to_col))
+    else:
+        # List of config-style FK dicts
+        for fk in foreign_keys:
+            from_tbl = fk.get("from")
+            to_tbl = fk.get("to")
+            from_col = fk.get("source_column")
+            to_col = fk.get("target_column")
+
+            if not all([from_tbl, to_tbl, from_col, to_col]):
+                print(f"⚠️ FK skipped — missing fields: {fk}")
+                continue
+
+            if from_tbl == to_tbl and from_col in pk_dict.get(from_tbl, []):
+                print(f"⏩ Skipping self-FK {from_tbl}.{from_col} — it's the table's PK.")
+                continue
+
+            if from_tbl not in temp_tables or to_tbl not in temp_tables:
+                print(f"⚠️ FK skipped — table missing: {from_tbl} or {to_tbl}")
+                continue
+
+            if from_col not in temp_tables[from_tbl].columns:
+                temp_tables[from_tbl][from_col] = pd.Series(dtype="Int64")
+                print(f"➕ FK column '{from_col}' added to '{from_tbl}'")
+
+            fk_dict.setdefault(from_tbl, []).append((from_col, to_tbl, to_col))
+
+    return (temp_tables, fk_dict) if return_fk_dict else temp_tables
 
 # Convert PK columns to Int64 if numeric but not integers
 def convert_pk_column_to_int(tables: Dict[str, pd.DataFrame], pk_dict: Dict[str, List[str]]):
@@ -423,49 +590,39 @@ def convert_pk_column_to_int(tables: Dict[str, pd.DataFrame], pk_dict: Dict[str,
                     tables[table][pk] = pd.to_numeric(tables[table][pk], errors='coerce').astype("Int64")
                     print(f"🔢 Converted '{table}.{pk}' to Int64")
 
-# ===== link generated pk to a table (optional) === #
-def apply_configured_foreign_keys(
-    tables: dict,
-    pk_dict: dict,
-    foreign_keys: list,
-    return_fk_dict: bool = False
-) -> Optional[Dict[str, List[Tuple[str, str, str]]]]:
-    """
-    Adds FK placeholder columns from config, and optionally returns fk_dict.
-
-    Returns:
-    - fk_dict: {to_table: [(fk_column, from_table, from_col), ...]}
-    """
-    fk_dict = {}
-
-    for fk_spec in foreign_keys:
-        from_table = fk_spec["from"]
-        to_table = fk_spec["to"]
-        fk_name = fk_spec.get("fk_name")
-
-        if from_table not in tables or to_table not in tables:
-            print(f"⚠️ FK skipped — missing table(s): {from_table} or {to_table}")
-            continue
-        if from_table not in pk_dict or not pk_dict[from_table]:
-            print(f"⚠️ FK skipped — no PK found for '{from_table}'")
-            continue
-
-        pk_col = pk_dict[from_table][0]
-        fk_col = fk_name or pk_col
-
-        if fk_col in tables[to_table].columns:
-            print(f"ℹ️ FK '{fk_col}' already exists in '{to_table}' — skipping.")
-        else:
-            tables[to_table][fk_col] = pd.Series(dtype="Int64")
-            print(f"✅ Added FK column '{fk_col}' to '{to_table}' (→ {from_table}.{pk_col})")
-
-        # Add to FK dict
-        fk_dict.setdefault(to_table, []).append((fk_col, from_table, pk_col))
-
-    return fk_dict if return_fk_dict else None
-
-
 # ============================================= 2. Build and populate dim_date (DW:IF OLAP CONSIDERED)================================ # 
+def extract_date_columns_from_temp(
+    temp_tables: Dict[str, pd.DataFrame],
+    date_columns: List[str]
+) -> pd.DataFrame:
+    """
+    Extracts available date columns from already standardized temp_tables (OLTP tables).
+    Only uses columns present in the tables (no fuzzy matching).
+    Returns a combined DataFrame for use in date_dim generation.
+    """
+    if not date_columns:
+        print("[extract_date_columns_from_oltp] ⚠️ No date_columns provided in config.")
+        return pd.DataFrame()
+
+    candidate_frames = []
+    found_cols = set()
+
+    for table_name, df in temp_tables.items():
+        matching_cols = [col for col in date_columns if col in df.columns]
+        if matching_cols:
+            found_cols.update(matching_cols)
+            candidate_frames.append(df[matching_cols])
+
+    missing_cols = set(date_columns) - found_cols
+    if missing_cols:
+        print(f"[extract_date_columns_from_oltp] ⚠️ The following date columns were not found in any table: {sorted(missing_cols)}")
+
+    if candidate_frames:
+        return pd.concat(candidate_frames, axis=0, ignore_index=True)
+
+    print("[extract_date_columns_from_oltp] ⚠️ No matching date columns found across temp_tables.")
+    return pd.DataFrame()
+
 def generate_date_dim(
     df: pd.DataFrame,
     date_columns: List[str],
@@ -514,7 +671,6 @@ def generate_date_dim(
     print(f"[generate_date_dim] ✅ Created date dimension with {len(date_dim)} unique dates.")
     return date_dim
 
-# ============================3. Apply date mapping on OLTP tables ============================= #
 def apply_configured_date_mapping(
     tables: Dict[str, pd.DataFrame],
     date_dim: pd.DataFrame,
@@ -546,136 +702,77 @@ def apply_configured_date_mapping(
 
     return tables
 
-
-# ============================4. PK FK ,SK INFERENCING: pk_dict, fk_dict, sk_dict, report = infer_keys_extended(oltp_tables); ============================= #
-def infer_foreign_keys_from_pk_dict(
-    tables: Dict[str, pd.DataFrame],
-    pk_dict: Dict[str, List[str]]
-) -> Dict[str, List[Tuple[str, str, str]]]:
+def copy_date_dim_to_olap(conn, oltp_tables: Dict[str, pd.DataFrame], olap_schema: str):
     """
-    Infers foreign keys by matching *_id columns against primary keys of other tables.
-    
-    Returns:
-    - fk_dict: table -> list of (fk_col, ref_table, ref_col)
+    Copies 'date_dim' from OLTP to OLAP schema using existing schema from OLTP.
+    Skips creation if already exists and safely inserts rows.
     """
-    fk_dict = {}
-    pk_lookup = {pk_col: table for table, pk_cols in pk_dict.items() for pk_col in pk_cols}
+    table_name = "date_dim"
+    df = oltp_tables.get(table_name)
 
-    for table_name, df in tables.items():
-        fk_list = []
-        for col in df.columns:
-            if col.endswith("_id") and col in pk_lookup:
-                ref_table = pk_lookup[col]
-                if ref_table != table_name:  # don't refer to self
-                    fk_list.append((col, ref_table, col))
-        if fk_list:
-            fk_dict[table_name] = fk_list
+    if df is None or df.empty:
+        print(f"⚠️ Skipping copy — '{table_name}' not found or empty in OLTP.")
+        return
 
-    return fk_dict
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = %s AND table_name = %s
+            );
+        """, (olap_schema, table_name))
+        exists = cur.fetchone()[0]
 
-def infer_keys_extended(tables: Dict[str, pd.DataFrame]) -> Tuple[Dict[str, str], Dict[str, List[Tuple[str, str, str]]], Dict[str, List[str]], str]:
-    primary_keys, foreign_keys, surrogate_keys = {}, {}, {}
-    report_lines = []
-    table_name_roots = {
-        tbl: tbl.lower().replace("_df", "").replace("dim_", "").replace("fact_", "").rstrip("s")
-        for tbl in tables.keys()
-    }
-    report_lines.append("\n🔍 **Extended Key Inference Report**\n")
-    report_lines.append("📌 **Primary Keys**")
-    for table_name, df in tables.items():
-        root = table_name_roots[table_name]
-        pk_candidates = [col for col in df.columns if col.endswith("_id") and root in col.lower() and df[col].is_unique]
-        if len(pk_candidates) == 1:
-            primary_keys[table_name] = pk_candidates[0]
-            report_lines.append(f"   ✔️ {table_name:<20} → {pk_candidates[0]}")
-        elif len(pk_candidates) > 1:
-            report_lines.append(f"   ⚠️ {table_name:<20} → Multiple PKs: {pk_candidates}")
-        else:
-            report_lines.append(f"   ❌ {table_name:<20} → No primary key detected")
-    pk_lookup = {pk: tbl for tbl, pk in primary_keys.items()}
-    report_lines.append("\n📎 **Foreign Keys**")
-    for table_name, df in tables.items():
-        fk_list = [(col, pk_lookup[col], col) for col in df.columns if col.endswith("_id") and col in pk_lookup and pk_lookup[col] != table_name]
-        if fk_list:
-            foreign_keys[table_name] = fk_list
-            for col, ref_table, ref_col in fk_list:
-                report_lines.append(f"   🔗 {table_name:<20} → {col} → {ref_table}.{ref_col}")
-        elif table_name not in primary_keys:
-            report_lines.append(f"   ℹ️ {table_name:<20} → No PK or FK")
-        else:
-            report_lines.append(f"   ℹ️ {table_name:<20} → Has PK, no FKs")
-    report_lines.append("\n🧬 **Surrogate Key Candidates**")
-    for table_name, df in tables.items():
-        surrogate_keys[table_name] = [col for col in df.columns if col.endswith('_id') and pd.api.types.is_integer_dtype(df[col])]
-        if surrogate_keys[table_name]:
-            report_lines.append(f"   🧬 {table_name:<20} → {', '.join(surrogate_keys[table_name])}")
-    report_lines.append(f"\n✅ **Inference Summary**")
-    report_lines.append(f"   ➤ Total Tables: {len(tables)}")
-    report_lines.append(f"   ➤ Primary Keys: {len(primary_keys)}")
-    report_lines.append(f"   ➤ Foreign Keys: {sum(len(v) for v in foreign_keys.values())}")
-    report_lines.append(f"   ➤ Surrogate Keys: {len(surrogate_keys)} tables evaluated\n")
-    return primary_keys, foreign_keys, surrogate_keys, "\n".join(report_lines)
+        if not exists:
+            cur.execute(f'CREATE TABLE "{olap_schema}"."{table_name}" (LIKE zulo_oltp."{table_name}" INCLUDING ALL);')
+            print(f"🧱 Created '{olap_schema}.{table_name}' using OLTP structure.")
 
-# ===  Table Sorting === #
-def topological_sort_tables(tables: Dict[str, pd.DataFrame], foreign_keys: Dict[str, List[Tuple[str, str, str]]]) -> List[str]:
-    graph = defaultdict(set)
-    in_degree = defaultdict(int)
-    for table in tables:
-        graph[table] = set()
-        in_degree[table] = 0
-    for table, fks in foreign_keys.items():
-        for _, ref_table, _ in fks:
-            graph[ref_table].add(table)
-            in_degree[table] += 1
-    queue = deque([t for t in tables if in_degree[t] == 0])
-    sorted_tables = []
-    while queue:
-        node = queue.popleft()
-        sorted_tables.append(node)
-        for dependent in graph[node]:
-            in_degree[dependent] -= 1
-            if in_degree[dependent] == 0:
-                queue.append(dependent)
-    return sorted_tables
+        conn.commit()
 
-# === CREATE SCHEMA & TABLES (OLTP)==== #
+    # Upsert into OLAP schema using PK from OLTP
+    upsert_dataframe_to_table(
+        conn,
+        df,
+        table_name=table_name,
+        schema=olap_schema,
+        pk_cols=["date_id"],
+        skip_on_fk_violation=True
+    )
+
+# ================================================= CREATE SCHEMA & TABLES (OLTP)==== #
 
 def generate_sql_type(dtype: str) -> str:
-    mapping = {
-        "object": "TEXT",
-        "int64": "INTEGER", "Int64": "INTEGER",
-        "float64": "DOUBLE PRECISION",
-        "bool": "BOOLEAN",
-        "datetime64[ns]": "TIMESTAMP"
-    }
-    return mapping.get(dtype, "TEXT")
+    dtype = dtype.lower()
+    if "int" in dtype:
+        return "INT"
+    elif "float" in dtype or "double" in dtype:
+        return "DOUBLE PRECISION"
+    elif "bool" in dtype:
+        return "BOOLEAN"
+    elif "datetime" in dtype or "timestamp" in dtype:
+        return "TIMESTAMP"
+    elif "date" in dtype:
+        return "DATE"
+    elif "object" in dtype or "string" in dtype or "category" in dtype:
+        return "TEXT"
+    return "TEXT"
 
-def ensure_schema_and_tables(
+def create_tables_without_foreign_keys(
     conn,
     schema: str,
     tables: Dict[str, pd.DataFrame],
-    primary_keys: Dict[str, List[str]],
-    foreign_keys: Dict[str, List[Tuple[str, str, str]]],
-    surrogate_keys: Dict[str, List[str]] = None
+    primary_keys: Dict[str, List[str]]
 ) -> None:
-    """Create tables in topological order based on FK dependencies"""
     cur = conn.cursor()
-    
-    # Create schema
+
+    # Ensure schema exists
     cur.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s", (schema,))
     if not cur.fetchone():
         cur.execute(f'CREATE SCHEMA "{schema}"')
         print(f"📁 Created schema: {schema}")
-    
-    # Get creation order based on dependencies
-    sorted_tables = topological_sort_tables(tables, foreign_keys)
-    print(f"🔀 Table creation order: {sorted_tables}")
-    
-    # Create tables in dependency order
-    for table_name in sorted_tables:
-        df = tables[table_name]
-        
-        # Skip existing tables
+
+    for table_name, df in tables.items():
+        # Skip if table exists
         cur.execute("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
@@ -683,62 +780,162 @@ def ensure_schema_and_tables(
             )
         """, (schema, table_name))
         if cur.fetchone()[0]:
-            print(f"⏩ Table {schema}.{table_name} exists - skipping creation")
+            print(f"⏩ {schema}.{table_name} exists — skipping")
             continue
-            
+
         print(f"🧱 Creating {schema}.{table_name}...")
-        
-        # Column definitions
+
         cols = []
         for col in df.columns:
-            dtype = str(df[col].dtype)
-            sql_type = generate_sql_type(dtype)
+            sql_type = generate_sql_type(str(df[col].dtype))
             cols.append(f'"{col}" {sql_type}')
-        
-        # Add PK constraint
-        pk_cols = primary_keys.get(table_name, [])
-        if pk_cols:
-            quoted_pk = [f'"{c}"' for c in pk_cols]
-            cols.append(f'PRIMARY KEY ({", ".join(quoted_pk)})')
-            print(f"🔑 Adding PK: {pk_cols}")
-        
-        # Add FK constraints
-        for fk_col, ref_table, ref_col in foreign_keys.get(table_name, []):
-            cols.append(
-                f'FOREIGN KEY ("{fk_col}") '
-                f'REFERENCES "{schema}"."{ref_table}" ("{ref_col}")'
-            )
-            print(f"🔗 Adding FK: {fk_col} → {ref_table}.{ref_col}")
-        
-        # Execute creation
+
+        pk = primary_keys.get(table_name, [])
+        if pk:
+            quoted_pk = ', '.join([f'"{c}"' for c in pk])
+            cols.append(f'PRIMARY KEY ({quoted_pk})')
+
         create_sql = f'CREATE TABLE "{schema}"."{table_name}" (\n  ' + ',\n  '.join(cols) + '\n)'
-        try:
-            cur.execute(create_sql)
-            print(f"✅ Created {table_name}")
-        except Exception as e:
-            conn.rollback()
-            print(f"❌ Failed to create {table_name}: {str(e)}")
-            raise
-    
+        cur.execute(create_sql)
+        print(f"✅ Created table: {table_name}")
+
     conn.commit()
     cur.close()
 
+def apply_foreign_keys(
+    conn,
+    schema: str,
+    foreign_keys: Dict[str, List[Tuple[str, str, str]]]
+) -> None:
+    """
+    Adds FK constraints using ALTER TABLE — only if referenced column is UNIQUE or PK.
+    """
+    cur = conn.cursor()
+
+    for from_table, fks in foreign_keys.items():
+        for fk_col, to_table, to_col in fks:
+            constraint_name = f"fk_{from_table}_{fk_col}_to_{to_table}_{to_col}"
+
+            # Skip if already applied
+            cur.execute("""
+                SELECT 1 FROM information_schema.table_constraints
+                WHERE constraint_schema = %s AND table_name = %s AND constraint_name = %s
+            """, (schema, from_table, constraint_name))
+            if cur.fetchone():
+                print(f"⏩ FK exists: {constraint_name} — skipping")
+                continue
+
+            # Ensure referenced column is unique or PK
+            cur.execute("""
+                SELECT 1
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.constraint_column_usage ccu
+                  ON tc.constraint_name = ccu.constraint_name
+                 AND tc.constraint_schema = ccu.constraint_schema
+                WHERE tc.table_schema = %s
+                  AND tc.table_name = %s
+                  AND ccu.column_name = %s
+                  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
+            """, (schema, to_table, to_col))
+            if not cur.fetchone():
+                print(f"⚠️ Skipped FK: {from_table}.{fk_col} → {to_table}.{to_col} — target not PK or UNIQUE")
+                continue
+
+            try:
+                cur.execute(f'''
+                    ALTER TABLE "{schema}"."{from_table}"
+                    ADD CONSTRAINT "{constraint_name}"
+                    FOREIGN KEY ("{fk_col}")
+                    REFERENCES "{schema}"."{to_table}" ("{to_col}");
+                ''')
+                print(f"🔗 Enforced FK: {from_table}.{fk_col} → {to_table}.{to_col}")
+            except Exception as e:
+                print(f"❌ FK failed: {from_table}.{fk_col} → {to_table}.{to_col} — {e}")
+
+    conn.commit()
+    cur.close()
+
+def create_oltp_schema_and_tables(
+    conn,
+    schema: str,
+    tables: Dict[str, pd.DataFrame],
+    primary_keys: Dict[str, List[str]],
+    foreign_keys: Dict[str, List[Tuple[str, str, str]]]
+) -> None:
+    print(f"📦 Creating OLTP schema: {schema}")
+    create_tables_without_foreign_keys(conn, schema, tables, primary_keys)
+    apply_foreign_keys(conn, schema, foreign_keys)
+    print("✅ OLTP schema and constraints applied.\n")
+
+def display_database_info(oltp_tables, pk_dict, fk_dict, sk_dict):
+    # Display key information
+    print("\n=== Database Structure ===")
+    print(f"Tables: {list(oltp_tables.keys())}")
+    print("\n")
+    print(f"\nPrimary Keys: {pk_dict}")
+    print("\n")
+    print(f"Foreign Keys: {fk_dict}")
+    print("\n")
+    print(f"Surrogate Keys: {sk_dict}")
+    
+    # Display table details
+    print("\n=== Table Details ===")
+    for name, df in oltp_tables.items():
+        print(f"\n📊 {name.upper()}")
+        print(f"Rows: {df.shape[0]}, Columns: {df.shape[1]}")
+        print("\nSample Data:")
+        display(df.head(3))
+        print("\nColumn Info:")
+        display(df.dtypes)
+        print("-" * 50)
+
 # ==== Load Data into OLTP Tables (staging) ====#Ensure all FKs (customer_id, account_id, *_date_id) are present and non-null where expected
+def extract_fact_columns(field_config: List[Union[str, Dict[str, str]]]) -> List[str]:
+    """
+    Extracts flat column names from a fact field config.
+    """
+    cols = []
+    for item in field_config:
+        if isinstance(item, str):
+            cols.append(item)
+        elif isinstance(item, dict):
+            cols.extend(item.keys())
+    return cols
+
 def upsert_dataframe_to_table(
     conn,
     df: pd.DataFrame,
     table_name: str,
     schema: str = "public",
-    pk_cols: List[str] = None
+    pk_cols: Optional[List[str]] = None,
+    skip_on_fk_violation: bool = False  # 🔄 NEW FLAG
 ) -> None:
     import io
+    from psycopg2.errors import ForeignKeyViolation
+    import psycopg2
+
     if df.empty:
         print(f"[UPSERT] ⚠️ Skipping '{schema}.{table_name}' — empty DataFrame")
         return
 
     try:
-        # Step 1: Fetch DB column order and types
         cur = conn.cursor()
+
+        # Step 1: Check if table exists
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = %s 
+                AND table_name = %s
+            );
+        """, (schema, table_name))
+        exists = cur.fetchone()[0]
+
+        if not exists:
+            print(f"[UPSERT] ❌ Table '{schema}.{table_name}' does not exist — cannot insert")
+            return
+
+        # Step 2: Fetch DB column info
         cur.execute("""
             SELECT column_name, is_nullable, data_type
             FROM information_schema.columns
@@ -746,13 +943,11 @@ def upsert_dataframe_to_table(
             ORDER BY ordinal_position;
         """, (schema, table_name))
         column_info = cur.fetchall()
-        cur.close()
-
         db_columns = [col[0] for col in column_info]
         column_nullability = {col[0]: col[1] for col in column_info}
         column_types = {col[0]: col[2] for col in column_info}
 
-        # Step 2: Clean and align DataFrame
+        # Step 3: Clean DataFrame
         cleaned_df = df.copy()
         for col in db_columns:
             if col not in cleaned_df.columns:
@@ -768,34 +963,81 @@ def upsert_dataframe_to_table(
                 else:
                     cleaned_df[col] = None
 
+        # Fill non-nullable string columns
+        for col in db_columns:
+            if column_nullability[col] == 'NO' and col in cleaned_df.columns:
+                if cleaned_df[col].dtype == 'object':
+                    cleaned_df[col] = cleaned_df[col].replace('', 'unknown').fillna('unknown')
+
         cleaned_df = cleaned_df[db_columns]
 
-        string_cols = [col for col in cleaned_df.columns if cleaned_df[col].dtype == 'object']
-        cleaned_df[string_cols] = cleaned_df[string_cols].fillna('')
+        if skip_on_fk_violation:
+            # 🔄 Insert row by row with FK violation handling
+            inserted, skipped = 0, 0
+            for i, row in cleaned_df.iterrows():
+                placeholders = ", ".join(["%s"] * len(db_columns))
+                insert_cols = ', '.join(f'"{c}"' for c in db_columns)
+                conflict_cols = ', '.join(f'"{c}"' for c in pk_cols or [])
+                updates = ', '.join(f'"{c}" = EXCLUDED."{c}"' for c in db_columns if not pk_cols or c not in pk_cols)
 
-        # Step 3: Create temp buffer
-        buffer = io.StringIO()
-        cleaned_df.to_csv(buffer, index=False, header=False, sep="\t", na_rep="\\N")
-        buffer.seek(0)
+                insert_sql = f"""
+                    INSERT INTO "{schema}"."{table_name}" ({insert_cols})
+                    VALUES ({placeholders})
+                    ON CONFLICT ({conflict_cols})
+                    DO UPDATE SET {updates};
+                """ if pk_cols else f"""
+                    INSERT INTO "{schema}"."{table_name}" ({insert_cols})
+                    VALUES ({placeholders})
+                    ON CONFLICT DO NOTHING;
+                """
 
-        # Step 4: Insert in try/except
-        temp_table = f"temp_{table_name}"
-        cur = conn.cursor()
-        cur.execute(f'CREATE TEMP TABLE "{temp_table}" (LIKE "{schema}"."{table_name}" INCLUDING ALL);')
-        cur.copy_from(buffer, temp_table, sep="\t", null="\\N", columns=db_columns)
+                try:
+                    cur.execute(insert_sql, tuple(row))
+                    inserted += 1
+                except ForeignKeyViolation:
+                    conn.rollback()  # must rollback failed tx
+                    skipped += 1
+                except Exception as e:
+                    conn.rollback()
+                    print(f"[ROW FAIL] ❌ Row {i}: {e}")
+                    skipped += 1
 
-        insert_columns = ', '.join(f'"{col}"' for col in db_columns)
-        update_assignments = ', '.join(f'"{col}" = EXCLUDED."{col}"' for col in db_columns if col not in pk_cols)
+            conn.commit()
+            print(f"[UPSERT] ✅ Inserted {inserted} rows into {schema}.{table_name}")
+            if skipped:
+                print(f"⚠️ Skipped {skipped} rows due to FK violations")
+        else:
+            # 🚀 Bulk insert to temp table (faster but all-or-nothing)
+            buffer = io.StringIO()
+            cleaned_df.to_csv(buffer, index=False, header=False, sep="\t", na_rep="\\N")
+            buffer.seek(0)
 
-        upsert_sql = f'''
-            INSERT INTO "{schema}"."{table_name}" ({insert_columns})
-            SELECT {insert_columns} FROM "{temp_table}"
-            ON CONFLICT ({', '.join(f'"{col}"' for col in pk_cols)})
-            DO UPDATE SET {update_assignments};
-        '''
-        cur.execute(upsert_sql)
-        conn.commit()
-        print(f"[UPSERT] ✅ Successfully upserted {len(cleaned_df)} rows to {schema}.{table_name}")
+            temp_table = f"temp_{table_name}"
+            cur.execute(f'DROP TABLE IF EXISTS "{temp_table}"')
+            cur.execute(f'CREATE TEMP TABLE "{temp_table}" (LIKE "{schema}"."{table_name}" INCLUDING ALL);')
+            cur.copy_from(buffer, temp_table, sep="\t", null="\\N", columns=db_columns)
+
+            insert_columns = ', '.join(f'"{col}"' for col in db_columns)
+            update_assignments = ', '.join(f'"{col}" = EXCLUDED."{col}"' for col in db_columns if pk_cols and col not in pk_cols)
+
+            if pk_cols:
+                conflict_cols = ', '.join(f'"{col}"' for col in pk_cols)
+                upsert_sql = f'''
+                    INSERT INTO "{schema}"."{table_name}" ({insert_columns})
+                    SELECT {insert_columns} FROM "{temp_table}"
+                    ON CONFLICT ({conflict_cols})
+                    DO UPDATE SET {update_assignments};
+                '''
+            else:
+                upsert_sql = f'''
+                    INSERT INTO "{schema}"."{table_name}" ({insert_columns})
+                    SELECT {insert_columns} FROM "{temp_table}"
+                    ON CONFLICT DO NOTHING;
+                '''
+
+            cur.execute(upsert_sql)
+            conn.commit()
+            print(f"[UPSERT] ✅ Successfully upserted {len(cleaned_df)} rows to {schema}.{table_name}")
 
     except Exception as e:
         conn.rollback()
@@ -806,78 +1048,97 @@ def upsert_dataframe_to_table(
         if 'cur' in locals():
             cur.close()
 
-
-
-# ==============================5. OLAP WORKFLOW  FROM OLTP : build empty OLAP tables from the config: === #
-
-def build_empty_olap_tables_from_config(
-    dimension_defs: Dict[str, List[str]],
-    fact_defs: Dict[str, List[str]]
-) -> Dict[str, pd.DataFrame]:
+# ============================== OLAP WORKFLOW  FROM OLTP :  ========================== #
+def create_table_if_not_exists(
+    conn, 
+    df: pd.DataFrame, 
+    table_name: str, 
+    schema: str = "public",
+    pk_cols: List[str] = None,
+    fk_constraints: List[Dict] = None,
+    is_olap: bool = False
+) -> None:
     """
-    Build empty DataFrames representing OLAP table schemas
-    based on config-defined dimension and fact table columns.
-
-    Parameters:
-    - dimension_defs (dict): e.g. config["olap"]["dimensions"]
-    - fact_defs (dict): e.g. config["olap"]["facts"]
-
-    Returns:
-    - dict: table_name -> empty DataFrame with defined columns
+    Create table with proper constraints for both OLTP and OLAP schemas.
     """
-    olap_tables = {}
+    def get_sql_type(col_name: str, dtype, is_olap: bool) -> str:
+        if col_name.endswith('_id') and not is_olap:
+            return 'SERIAL' if col_name in (pk_cols or []) else 'INTEGER'
+        if col_name.endswith('_sk') and is_olap:
+            return 'INTEGER'
+        if col_name.endswith('date_id') and is_olap:
+            return 'INTEGER'
+            
+        if np.issubdtype(dtype, np.integer):
+            return 'INTEGER'
+        elif np.issubdtype(dtype, np.floating):
+            return 'NUMERIC'
+        elif np.issubdtype(dtype, np.datetime64):
+            return 'TIMESTAMP'
+        elif np.issubdtype(dtype, np.bool_):
+            return 'BOOLEAN'
+        else:
+            if dtype == object:
+                max_length = df[col_name].astype(str).str.len().max()
+                if max_length <= 255:
+                    return f'VARCHAR({max_length})'
+            return 'TEXT'
 
-    for table_name, columns in {**dimension_defs, **fact_defs}.items():
-        olap_tables[table_name] = pd.DataFrame(columns=columns)
+    # Generate column definitions
+    col_defs = []
+    for col in df.columns:
+        sql_type = get_sql_type(col, df[col].dtype, is_olap)
+        nullable = 'NOT NULL' if col in (pk_cols or []) else ''
+        col_defs.append(f'"{col}" {sql_type} {nullable}')
 
-    print(f"[build_empty_olap_tables_from_config] ✅ Built {len(olap_tables)} OLAP tables from config.")
-    return olap_tables
+    # Add constraints
+    constraints = []
+    
+    # Primary Key constraint
+    if pk_cols:
+        pk_cols_quoted = ', '.join(f'"{c}"' for c in pk_cols)
+        pk_constraint = f'CONSTRAINT "{table_name}_pkey" PRIMARY KEY ({pk_cols_quoted})'
+        constraints.append(pk_constraint)
 
-# ================================7. Build & Load Dimension Tables (dim_*)===================================
-def get_olap_tables_from_oltp(
-    oltp_tables: Dict[str, Any],
-    dimension_defs: Dict[str, list],
-    fact_defs: Dict[str, list]
-) -> Dict[str, Any]:
-    """
-    Extract OLAP dimension and fact tables from existing OLTP tables.
+    # Foreign Key constraints
+    if fk_constraints:
+        for fk in fk_constraints:
+            constraint_name = f'fk_{table_name}_{fk["column"]}_to_{fk["references"]["table"]}'
+            fk_constraint = (
+                f'CONSTRAINT "{constraint_name}" '
+                f'FOREIGN KEY ("{fk["column"]}") '
+                f'REFERENCES "{schema}"."{fk["references"]["table"]}" '
+                f'("{fk["references"]["column"]}")'
+            )
+            constraints.append(fk_constraint)
 
-    Parameters:
-    - oltp_tables: dict of table_name -> DataFrame (OLTP normalized)
-    - dimension_defs: dict of dim_table_name -> required column list
-    - fact_defs: dict of fact_table_name -> required column list
+    # Build the CREATE TABLE statement using string concatenation to avoid backslash issues
+    create_stmt = (
+        f'CREATE TABLE IF NOT EXISTS "{schema}"."{table_name}" (\n'
+        + ',\n    '.join(col_defs)
+    )
+    
+    # Add constraints if they exist
+    if constraints:
+        create_stmt += ',\n    ' + ',\n    '.join(constraints)
+    
+    # Close the statement
+    create_stmt += '\n)'
 
-    Returns:
-    - dict of OLAP table_name -> DataFrame
-    """
-    olap_tables = {}
-
-    # Extract dimensions
-    for dim_name, dim_columns in dimension_defs.items():
-        matched = False
-        for src_table, df in oltp_tables.items():
-            if all(col in df.columns for col in dim_columns):
-                olap_tables[dim_name] = df[dim_columns].drop_duplicates().reset_index(drop=True)
-                print(f"✅ Extracted '{dim_name}' from OLTP table '{src_table}'")
-                matched = True
-                break
-        if not matched:
-            print(f"⚠️ Skipped dimension '{dim_name}' — required columns not found in OLTP tables")
-
-    # Extract facts
-    for fact_name, fact_columns in fact_defs.items():
-        matched = False
-        for src_table, df in oltp_tables.items():
-            if all(col in df.columns for col in fact_columns):
-                olap_tables[fact_name] = df[fact_columns].drop_duplicates().reset_index(drop=True)
-                print(f"✅ Extracted '{fact_name}' from OLTP table '{src_table}'")
-                matched = True
-                break
-        if not matched:
-            print(f"⚠️ Skipped fact '{fact_name}' — required columns not found in OLTP tables")
-
-    return olap_tables
-
+    with conn.cursor() as cur:
+        try:
+            cur.execute(create_stmt)
+            conn.commit()
+            print(f"[CREATE] 🧱 Created table '{schema}.{table_name}'")
+            if pk_cols:
+                print(f"[CREATE] 🔑 Primary Key: {pk_cols}")
+            if fk_constraints:
+                for fk in fk_constraints:
+                    print(f"[CREATE] 🔗 Foreign Key: {fk['column']} → {fk['references']['table']}.{fk['references']['column']}")
+        except Exception as e:
+            print(f"[CREATE] ❌ Failed to create table: {str(e)}")
+            conn.rollback()
+            raise
 
 def build_and_load_all_dimensions(
     conn,
@@ -886,108 +1147,420 @@ def build_and_load_all_dimensions(
     schema: str = "public"
 ) -> Dict[str, pd.DataFrame]:
     """
-    Dynamically builds and loads all dimension tables from config.
-    Assigns surrogate keys (SKs) via range().
-    
-    Parameters:
-    - conn: PostgreSQL connection
-    - oltp_tables: dict of source OLTP tables (DataFrames)
-    - dimension_defs: config["olap"]["dimensions"]
-    - schema: target schema (default "zulo_olap")
-
-    Returns:
-    - dict of lookup DataFrames: {dim_name: DataFrame with business_id + SK}
+    Builds and loads all dimension tables using surrogate keys added during OLTP transformation.
+    Reuses *_sk columns and ensures they're included as primary keys in dimension tables.
+    Returns a lookup dict of business keys + SKs per dimension.
     """
     lookup_tables = {}
 
     for dim_table, columns in dimension_defs.items():
-        # Infer business table name (strip 'dim_')
-        business_table = dim_table.replace("dim_", "")
-        if business_table not in oltp_tables:
-            print(f"[DIM LOAD] ⚠️ Skipping '{dim_table}' — source '{business_table}' not found.")
+        source_table = dim_table.replace("dim_", "")
+        if source_table not in oltp_tables:
+            print(f"[DIM LOAD] ⚠️ Source '{source_table}' not found — skipping '{dim_table}'")
             continue
 
-        source_df = oltp_tables[business_table]
+        df = oltp_tables[source_table].copy()
+        sk_col = f"{source_table}_sk"
 
-        if not all(col in source_df.columns for col in columns):
-            print(f"[DIM LOAD] ❌ Columns missing in source '{business_table}' for '{dim_table}'")
+        if sk_col not in df.columns:
+            print(f"[DIM LOAD] ❌ SK column '{sk_col}' missing in '{source_table}' — skipping")
             continue
 
-        # Deduplicate based on business keys
-        dim_df = source_df[columns].drop_duplicates().reset_index(drop=True)
+        if not all(col in df.columns for col in columns):
+            print(f"[DIM LOAD] ❌ Missing business keys for '{dim_table}' — skipping")
+            continue
 
-        # Create SK
-        sk_col = dim_table.replace("dim_", "") + "_sk"
-        dim_df[sk_col] = range(1, len(dim_df) + 1)
+        dim_df = df[[sk_col] + columns].drop_duplicates().reset_index(drop=True)
 
-        # Reorder columns
-        dim_df = dim_df[[sk_col] + columns]
+        # Create dimension table with PK if not exists
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = %s AND table_name = %s
+                );
+            """, (schema, dim_table))
+            exists = cur.fetchone()[0]
 
-        # Load to DB
-        upsert_dataframe_to_table(conn, dim_df, table_name=dim_table, schema=schema)
+            if not exists:
+                col_defs = [f'"{sk_col}" INT PRIMARY KEY'] + [f'"{col}" TEXT' for col in columns]
+                cur.execute(f'CREATE TABLE "{schema}"."{dim_table}" ({", ".join(col_defs)});')
+                print(f"[DIM CREATE] 🧱 Created '{schema}.{dim_table}' with PK '{sk_col}'")
+            conn.commit()
+
+        upsert_dataframe_to_table(
+            conn,
+            dim_df,
+            table_name=dim_table,
+            schema=schema,
+            pk_cols=[sk_col]
+        )
         print(f"[DIM LOAD] ✅ Loaded {len(dim_df)} rows into '{schema}.{dim_table}'")
 
-        # Save lookup
-        business_keys = [col for col in columns if col.endswith("_id")]
+        # Prepare lookup for fact joins
+        business_keys = [c for c in columns if c.endswith("_id")]
         lookup_tables[dim_table] = dim_df[business_keys + [sk_col]]
 
     return lookup_tables
 
-# ================================8. Build & Load Fact Tables (fact_*)===================================
-
 def build_and_load_all_facts(
     conn,
     oltp_tables: Dict[str, pd.DataFrame],
-    fact_defs: Dict[str, List[str]],
+    fact_config: Dict[str, Dict],
     dim_lookups: Dict[str, pd.DataFrame],
+    schema: str = "public"
+) -> Dict[str, pd.DataFrame]:
+    fact_lookups = {}
+    
+    for fact_name, config in fact_config.items():
+        print(f"\n📦 Building '{fact_name}'")
+        
+        # Get base fact table
+        source_table = config.get("source_table") or fact_name.replace("fact_", "")
+        if source_table not in oltp_tables:
+            print(f"[FACT LOAD] ⚠️ Source '{source_table}' not found")
+            continue
+
+        # Start with base table
+        fact_df = oltp_tables[source_table].copy()
+
+        # Apply joins first
+        for join_config in config.get("joins", []):
+            try:
+                table_name, join_key, columns = join_config
+                if table_name not in oltp_tables:
+                    print(f"[FACT JOIN] ⚠️ Table '{table_name}' not found")
+                    continue
+
+                join_cols = [join_key] + [col for col in columns if col not in fact_df.columns]
+                join_df = oltp_tables[table_name][join_cols].drop_duplicates()
+                
+                fact_df = fact_df.merge(
+                    join_df,
+                    on=join_key,
+                    how="left"
+                )
+                print(f"[FACT JOIN] Joined '{table_name}' on '{join_key}' → added: {columns}")
+
+            except Exception as e:
+                print(f"[FACT JOIN] ❌ Join failed: {e}")
+                continue
+
+        # Map surrogate keys from dimensions
+        for dim_name, dim_df in dim_lookups.items():
+            try:
+                base_name = dim_name.replace("dim_", "")
+                natural_key = f"{base_name}_id"
+                surrogate_key = f"{base_name}_sk"
+                
+                if natural_key in fact_df.columns:
+                    sk_mapping = dim_df[[natural_key, surrogate_key]].drop_duplicates()
+                    
+                    if surrogate_key in fact_df.columns:
+                        fact_df = fact_df.drop(columns=[surrogate_key])
+                    
+                    fact_df = fact_df.merge(
+                        sk_mapping,
+                        on=natural_key,
+                        how="left",
+                        validate="many_to_one"
+                    )
+                    
+                    missing_count = fact_df[surrogate_key].isna().sum()
+                    if missing_count > 0:
+                        print(f"[FACT JOIN] ⚠️ Warning: {missing_count} rows have missing {surrogate_key}")
+                    else:
+                        print(f"[FACT JOIN] Mapped {natural_key} → {surrogate_key}")
+                        
+            except Exception as e:
+                print(f"[FACT JOIN] ❌ SK mapping failed for {dim_name}: {e}")
+                continue
+
+        # Handle calculated fields
+        for field in config.get("fields", []):
+            if isinstance(field, dict):
+                for new_col, expr in field.items():
+                    try:
+                        fact_df[new_col] = pd.eval(expr, local_dict=fact_df)
+                        fact_df[new_col] = fact_df[new_col].round(2)
+                        print(f"[FACT BUILD] 🧮 Calculated '{new_col}' using '{expr}'")
+                    except Exception as e:
+                        print(f"[FACT BUILD] ❌ Failed to compute '{new_col}': {e}")
+
+        # Collect all required fields
+        required_fields = []
+        for field in config["fields"]:
+            if isinstance(field, str):
+                required_fields.append(field)
+            elif isinstance(field, dict):
+                required_fields.extend(field.keys())
+
+        # Verify all required fields exist
+        missing = [col for col in required_fields if col not in fact_df.columns]
+        if missing:
+            print(f"[FACT LOAD] ❌ Missing columns: {missing}")
+            print("Available columns:", fact_df.columns.tolist())
+            continue
+
+        # Determine primary key columns (combination of surrogate keys and date_ids)
+        pk_columns = [col for col in required_fields if col.endswith('_sk') or col.endswith('date_id')]
+        if not pk_columns:
+            print(f"[FACT LOAD] ⚠️ No primary key columns found for {fact_name}")
+            continue
+
+        # Select final columns and remove duplicates based on PK columns
+        fact_df = fact_df[required_fields].drop_duplicates(subset=pk_columns).reset_index(drop=True)
+
+        try:
+            # Create fact table with composite primary key
+            create_stmt = f'CREATE TABLE IF NOT EXISTS "{schema}"."{fact_name}" ('
+            
+            # Add column definitions with proper types
+            col_defs = []
+            for col in fact_df.columns:
+                if col.endswith('_sk') or col.endswith('date_id'):
+                    sql_type = 'INTEGER'
+                elif col in ['amount', 'loan_amount', 'interest', 'interest_rate']:
+                    sql_type = 'NUMERIC'
+                else:
+                    sql_type = 'TEXT'
+                col_defs.append(f'"{col}" {sql_type}')
+            
+            # Add primary key constraint - fixed version
+            pk_columns_quoted = [f'"{col}"' for col in pk_columns]
+            col_defs.append(f'PRIMARY KEY ({", ".join(pk_columns_quoted)})')
+            
+            create_stmt += ','.join(col_defs) + ');'
+            
+            with conn.cursor() as cur:
+                cur.execute(create_stmt)
+                conn.commit()
+                print(f"[CREATE] 🧱 Created fact table '{schema}.{fact_name}' with PK: {pk_columns}")
+            
+            # Load data with upsert to handle duplicates
+            upsert_dataframe_to_table(
+                conn, 
+                fact_df, 
+                fact_name, 
+                schema=schema,
+                pk_cols=pk_columns  # Pass PK columns for proper upsert
+            )
+            
+            print(f"[FACT LOAD] ✅ Loaded {len(fact_df)} rows into '{fact_name}'")
+            fact_lookups[fact_name] = fact_df
+            
+        except Exception as e:
+            print(f"[FACT LOAD] ❌ Load failed: {str(e)}")
+            continue
+
+    return fact_lookups
+
+def enforce_olap_foreign_keys(conn, schema: str, olap_fk_config: Dict[str, List]):
+    """
+    Enforce foreign key relationships in OLAP schema
+    """
+    print("\n🔗 Enforcing OLAP foreign keys...")
+    
+    for table_name, fk_list in olap_fk_config.items():
+        for fk_col, ref_table, ref_col in fk_list:
+            constraint_name = f"fk_{table_name}_{fk_col}_to_{ref_table}"
+            
+            with conn.cursor() as cur:
+                try:
+                    # Drop existing constraint if it exists
+                    drop_stmt = (
+                        f'ALTER TABLE "{schema}"."{table_name}" '
+                        f'DROP CONSTRAINT IF EXISTS "{constraint_name}"'
+                    )
+                    cur.execute(drop_stmt)
+                    
+                    # Create new foreign key constraint
+                    add_stmt = (
+                        f'ALTER TABLE "{schema}"."{table_name}" '
+                        f'ADD CONSTRAINT "{constraint_name}" '
+                        f'FOREIGN KEY ("{fk_col}") '
+                        f'REFERENCES "{schema}"."{ref_table}" ("{ref_col}")'
+                    )
+                    cur.execute(add_stmt)
+                    
+                    print(f"✅ Added FK: {table_name}.{fk_col} → {ref_table}.{ref_col}")
+                    
+                except Exception as e:
+                    print(f"❌ Failed to add FK {fk_col}: {str(e)}")
+                    conn.rollback()
+                    continue
+    
+    conn.commit()
+    print("✅ Foreign key enforcement complete")
+
+def generate_indexes_on_sk_and_date_ids(
+    conn,
+    tables: Dict[str, pd.DataFrame],
     schema: str = "public"
 ) -> None:
     """
-    Build and load all fact tables by joining to dimension SK lookups.
-    
-    Parameters:
-    - conn: DB connection
-    - oltp_tables: normalized OLTP data
-    - fact_defs: config["olap"]["facts"]
-    - dim_lookups: mapping from dim_name → lookup DataFrame (business_id → surrogate_sk)
-    - schema: target OLAP schema
+    Creates indexes on *_sk and *_date_id columns in the given schema.
+    Ignores tables that don't exist and logs index creation status.
     """
-    for fact_name, fact_columns in fact_defs.items():
-        source_name = fact_name.replace("fact_", "")  # e.g., 'fact_loans' → 'loans'
-        if source_name not in oltp_tables:
-            print(f"[FACT LOAD] ⚠️ Skipping '{fact_name}' — source '{source_name}' missing")
-            continue
+    created = []
+    skipped = []
 
-        fact_df = oltp_tables[source_name].copy()
+    with conn.cursor() as cur:
+        for table_name, df in tables.items():
+            # Check if table exists in DB
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = %s AND table_name = %s
+                );
+            """, (schema, table_name))
+            exists = cur.fetchone()[0]
 
-        # Join with all matching dim lookups
-        for dim_name, lkp_df in dim_lookups.items():
-            for join_col in lkp_df.columns:
-                if join_col in fact_df.columns:
-                    sk_col = lkp_df.columns[-1]  # assuming last column is *_sk
-                    fact_df = fact_df.merge(lkp_df, on=join_col, how="left")
-                    fact_df.drop(columns=[join_col], inplace=True)
+            if not exists:
+                print(f"[INDEX] ⚠️ Skipping '{schema}.{table_name}' — table does not exist.")
+                skipped.append(table_name)
+                continue
 
-        # Keep only columns defined in config
-        missing = [col for col in fact_columns if col not in fact_df.columns]
-        if missing:
-            print(f"[FACT LOAD] ❌ '{fact_name}' missing columns: {missing}")
-            continue
+            # Create indexes on *_sk and *_date_id columns
+            for col in df.columns:
+                if col.endswith("_sk") or col.endswith("_date_id"):
+                    index_name = f"idx_{table_name}_{col}"
+                    try:
+                        cur.execute(
+                            f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{schema}"."{table_name}"("{col}");'
+                        )
+                        created.append(index_name)
+                    except Exception as e:
+                        print(f"[INDEX] ❌ Failed: {index_name} — {e}")
 
-        fact_df = fact_df[fact_columns].drop_duplicates().reset_index(drop=True)
+    conn.commit()
 
-        # Add surrogate key for fact row if needed
-        fact_sk = fact_name.replace("fact_", "") + "_sk"
-        if fact_sk not in fact_df.columns:
-            fact_df[fact_sk] = range(1, len(fact_df) + 1)
-            fact_df = fact_df[[fact_sk] + fact_columns]  # reorder
+    print(f"\n[INDEX] ✅ Created {len(created)} indexes:")
+    for idx in created:
+        print(f"   - {idx}")
 
-        # Load to DB
-        upsert_dataframe_to_table(conn, fact_df, table_name=fact_name, schema=schema)
-        print(f"[FACT LOAD] ✅ Loaded '{fact_name}' with {len(fact_df)} rows")
-        print(f"[FACT JOIN] Joined '{dim_name}' on '{join_col}' → added '{sk_col}'")
+    if skipped:
+        print(f"\n[INDEX] ⚠️ Skipped {len(skipped)} tables (not found):")
+        for tbl in skipped:
+            print(f"   - {schema}.{tbl}")
 
-# ================================9. Validation & QA===================================
+def display_olap_info(conn, cfg: dict):
+    """
+    Display a simple overview of OLAP schema structure and relationships.
+    
+    Args:
+        conn: Database connection
+        cfg: Configuration dictionary containing OLAP schema
+    """
+    olap_schema = cfg["olap"]["schema"]
+    print(f"\n=== OLAP Schema: {olap_schema} ===")
+
+    # Get table information from database
+    with conn.cursor() as cur:
+        # 1. Display Dimensions
+        print("\n📊 DIMENSION TABLES:")
+        for dim_name in cfg["olap"]["dimensions"].keys():
+            cur.execute(f"""
+                SELECT COUNT(*) FROM {olap_schema}.{dim_name}
+            """)
+            count = cur.fetchone()[0]
+            print(f"- {dim_name}: {count:,} rows")
+            
+        # 2. Display Facts
+        print("\n📈 FACT TABLES:")
+        for fact_name in cfg["olap"]["facts"].keys():
+            cur.execute(f"""
+                SELECT COUNT(*) FROM {olap_schema}.{fact_name}
+            """)
+            count = cur.fetchone()[0]
+            print(f"- {fact_name}: {count:,} rows")
+        
+        # 3. Display Foreign Keys
+        print("\n🔗 RELATIONSHIPS:")
+        cur.execute("""
+            SELECT 
+                tc.table_name, kcu.column_name,
+                ccu.table_name AS ref_table,
+                ccu.column_name AS ref_column
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+            JOIN information_schema.constraint_column_usage ccu
+                ON ccu.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+            AND tc.table_schema = %s
+            ORDER BY tc.table_name;
+        """, (olap_schema,))
+        
+        for row in cur.fetchall():
+            print(f"- {row[0]}.{row[1]} → {row[2]}.{row[3]}")
+
+# ================================ERD Generation===================================
+def generate_erd_graph(
+    fk_dict: dict, 
+    schema_type: str = "both",  # "oltp", "olap", or "both"
+    sk_dict: dict = None, 
+    title: str = "Entity Relationship Diagram"
+) -> Digraph:
+    """
+    Generate an ERD-style graph using Graphviz for OLTP and/or OLAP schemas.
+    
+    Args:
+        fk_dict (dict): Foreign key relationships
+        schema_type (str): Type of schema to display ("oltp", "olap", or "both")
+        sk_dict (dict, optional): Surrogate key mappings
+        title (str): Title of the diagram
+    """
+    dot = Digraph('erd')
+    dot.attr(rankdir='LR')
+    dot.attr('node', shape='box', style='rounded')
+    
+    # Track tables to avoid duplicates
+    added_tables = set()
+    
+    def is_olap_table(table: str) -> bool:
+        return table.startswith(('fact_', 'dim_'))
+    
+    # Add nodes for all tables involved in relationships
+    for src_table, fks in fk_dict.items():
+        # Skip tables not in requested schema type
+        if schema_type != "both":
+            if schema_type == "oltp" and is_olap_table(src_table):
+                continue
+            if schema_type == "olap" and not is_olap_table(src_table):
+                continue
+                
+        if src_table not in added_tables:
+            dot.node(src_table, src_table)
+            added_tables.add(src_table)
+        
+        for fk_col, ref_table, ref_col in fks:
+            # Skip relationships not in requested schema type
+            if schema_type != "both":
+                if schema_type == "oltp" and is_olap_table(ref_table):
+                    continue
+                if schema_type == "olap" and not is_olap_table(ref_table):
+                    continue
+                    
+            if ref_table not in added_tables:
+                dot.node(ref_table, ref_table)
+                added_tables.add(ref_table)
+            
+            dot.edge(src_table, ref_table, label=f"{fk_col}")
+    
+    # Add surrogate key relationships if provided and if not OLTP-only
+    if sk_dict and schema_type != "oltp":
+        for table, sks in sk_dict.items():
+            if table not in added_tables:
+                dot.node(table, table)
+                added_tables.add(table)
+            
+            for sk in sks:
+                dot.edge(table, table, sk, style='dashed')
+    
+    return dot
+
+# ================================ Validation & QA===================================
 #  this step ensures facts and dimensions are not just created — but reliable and ready for BI tools, dashboards, or data science.
 def qa_runner_with_pass(
     oltp_tables: Dict[str, pd.DataFrame],
@@ -1066,39 +1639,7 @@ def qa_runner_with_pass(
 
     return qa_passed
 
-
-# ================================10. (Optional) Create Views, Indexes, & Optimize===================================
-#--- indexing
-
-def generate_indexes_on_sk_and_date_ids(
-    conn,
-    tables: Dict[str, pd.DataFrame],
-    schema: str = "public"
-) -> None:
-    """
-    Automatically creates indexes for *_sk and *_date_id columns in a given schema.
-    Only uses DataFrame metadata (no DB reflection).
-    """
-    cur = conn.cursor()
-    created = []
-
-    for table_name, df in tables.items():
-        for col in df.columns:
-            if col.endswith("_sk") or col.endswith("_date_id"):
-                index_name = f"idx_{table_name}_{col}"
-                stmt = f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{schema}"."{table_name}"("{col}");'
-                try:
-                    cur.execute(stmt)
-                    created.append(index_name)
-                except Exception as e:
-                    print(f"[INDEX] ❌ {index_name}: {e}")
-    conn.commit()
-    cur.close()
-
-    print(f"\n[INDEX] ✅ Created {len(created)} indexes:")
-    for idx in created:
-        print(f"   - {idx}")
-
+# ================================(Optional) Create Views============================
 # ---View Builder for Fact Summaries
 def create_materialized_fact_summary(
     conn,
@@ -1138,12 +1679,7 @@ def create_materialized_fact_summary(
     except Exception as e:
         print(f"❌ Failed to create materialized view {view_name}: {e}")
 
-
-# ================================11. Automate the Pipeline===================================
-
-
-
-# ================================12. DATA EXPORT =============================================
+#================================12. DATA EXPORT =============================================
 def export_sql_script(
     schema: str,
     tables: Dict[str, pd.DataFrame],
@@ -1194,52 +1730,11 @@ def save_tables_to_csv(tables: Dict[str, pd.DataFrame], export_dir: str) -> Dict
         print(f"[save_tables_to_csv] Saved {name} to {csv_path}")
     return csv_paths
 
+## ================================11. Automate the Pipeline===================================
 
-
-# etl_visual_helpers.py
-
-def plot_before_after_counts(raw_df: pd.DataFrame, normalized_tables: dict):
-    """
-    Visualize unique counts in raw_df vs row counts in normalized OLTP tables.
-    """
-    raw_counts = raw_df.nunique().sort_values(ascending=False)
-    normalized_counts = {name: len(df) for name, df in normalized_tables.items()}
-
-    df_raw = pd.DataFrame({"column_or_table": raw_counts.index, "unique_count": raw_counts.values})
-    df_norm = pd.DataFrame({"column_or_table": list(normalized_counts.keys()), "row_count": list(normalized_counts.values())})
-
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    sns.barplot(data=df_raw.head(15), x="unique_count", y="column_or_table", ax=axes[0], palette="Blues_d")
-    axes[0].set_title("🔍 Top Unique Counts in Raw Data")
-    axes[0].set_xlabel("Unique Values")
-    axes[0].set_ylabel("Column")
-
-    sns.barplot(data=df_norm, x="row_count", y="column_or_table", ax=axes[1], palette="Greens_d")
-    axes[1].set_title("🏗️ Rows per Normalized OLTP Table")
-    axes[1].set_xlabel("Row Count")
-    axes[1].set_ylabel("Table")
-
-    plt.tight_layout()
-    plt.show()
-
-
-def compare_unique_distribution(raw_df: pd.DataFrame, columns: list):
-    """
-    Plot a grid of unique value counts for specific raw_df columns.
-    """
-    num_cols = len(columns)
-    fig, axes = plt.subplots(nrows=(num_cols + 1) // 2, ncols=2, figsize=(14, 5 * ((num_cols + 1) // 2)))
-    axes = axes.flatten()
-
-    for i, col in enumerate(columns):
-        if col in raw_df.columns:
-            counts = raw_df[col].value_counts().head(20)
-            sns.barplot(x=counts.values, y=counts.index, ax=axes[i], palette="viridis")
-            axes[i].set_title(f"Top 20: {col}")
-            axes[i].set_xlabel("Count")
-
-    for j in range(i + 1, len(axes)):
-        fig.delaxes(axes[j])
-
-    plt.tight_layout()
-    plt.show()
+'''
+# df = read_data("data.csv")  # Local file
+# df = read_data("1DdmNsrdBRLfzBdgtvzvFHZ7ejFpLlpwW", "gdrive")  # Google Drive
+# df = read_data("https://example.com/data.csv")  # URL (auto-detected)
+# df.head()
+'''

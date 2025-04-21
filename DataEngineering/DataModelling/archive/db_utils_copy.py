@@ -1395,3 +1395,381 @@ def topological_sort_tables(tables: Dict[str, pd.DataFrame], foreign_keys: Dict[
             if in_degree[dependent] == 0:
                 queue.append(dependent)
     return sorted_tables
+
+
+def get_olap_tables_from_oltp(
+    oltp_tables: Dict[str, Any],
+    dimension_defs: Dict[str, list],
+    fact_defs: Dict[str, list]
+) -> Dict[str, Any]:
+    """
+    Extract OLAP dimension and fact tables from existing OLTP tables.
+
+    Parameters:
+    - oltp_tables: dict of table_name -> DataFrame (OLTP normalized)
+    - dimension_defs: dict of dim_table_name -> required column list
+    - fact_defs: dict of fact_table_name -> required column list
+
+    Returns:
+    - dict of OLAP table_name -> DataFrame
+    """
+    olap_tables = {}
+
+    # Extract dimensions
+    for dim_name, dim_columns in dimension_defs.items():
+        matched = False
+        for src_table, df in oltp_tables.items():
+            if all(col in df.columns for col in dim_columns):
+                olap_tables[dim_name] = df[dim_columns].drop_duplicates().reset_index(drop=True)
+                print(f"✅ Extracted '{dim_name}' from OLTP table '{src_table}'")
+                matched = True
+                break
+        if not matched:
+            print(f"⚠️ Skipped dimension '{dim_name}' — required columns not found in OLTP tables")
+
+    # Extract facts
+    for fact_name, fact_columns in fact_defs.items():
+        matched = False
+        for src_table, df in oltp_tables.items():
+            if all(col in df.columns for col in fact_columns):
+                olap_tables[fact_name] = df[fact_columns].drop_duplicates().reset_index(drop=True)
+                print(f"✅ Extracted '{fact_name}' from OLTP table '{src_table}'")
+                matched = True
+                break
+        if not matched:
+            print(f"⚠️ Skipped fact '{fact_name}' — required columns not found in OLTP tables")
+
+    return olap_tables
+
+
+def build_empty_olap_tables_from_config(
+    dimension_defs: Dict[str, List[str]],
+    fact_defs: Dict[str, List[str]]
+) -> Dict[str, pd.DataFrame]:
+    """
+    Build empty DataFrames representing OLAP table schemas
+    based on config-defined dimension and fact table columns.
+
+    Parameters:
+    - dimension_defs (dict): e.g. config["olap"]["dimensions"]
+    - fact_defs (dict): e.g. config["olap"]["facts"]
+
+    Returns:
+    - dict: table_name -> empty DataFrame with defined columns
+    """
+    olap_tables = {}
+
+    for table_name, columns in {**dimension_defs, **fact_defs}.items():
+        olap_tables[table_name] = pd.DataFrame(columns=columns)
+
+    print(f"[build_empty_olap_tables_from_config] ✅ Built {len(olap_tables)} OLAP tables from config.")
+    return olap_tables\
+    
+
+def run_dynamic_etl_pipeline1(
+    conn,
+    dataset_key: str,
+    raw_df: pd.DataFrame,
+    cfg: dict,
+    oltp_tables: Dict[str, pd.DataFrame] ,
+    pk_dict: Dict[str, List[str]],  
+    fk_dict: Dict[str, List[Tuple[str, str, str]]],  
+    sk_dict: Dict[str, List[str]] = None
+) -> Dict[str, any]:
+    from datetime import datetime
+    import logging
+
+    logging.info(f"🚀 Starting ETL pipeline for: {dataset_key}")
+    status = {"start_time": datetime.now().isoformat(), "stages": {}, "success": True}
+
+    oltp_schema = cfg["oltp"].get("schema", "oltp")
+
+    try:
+        # Step 1: Transform if not provided
+        if oltp_tables is None:
+            print("🔁 Transforming data...")
+            oltp_tables, pk_dict, fk_dict, sk_dict = transform_oltp(dataset_key, cfg, raw_df)
+        else:
+            # Enforce required parameters when providing pre-transformed data
+            if not pk_dict or not fk_dict:
+                raise ValueError("Must provide pk_dict and fk_dict when passing oltp_tables")
+
+        # Step 2: Create schema/tables with enforced constraints
+        ensure_schema_and_tables(
+            conn,
+            schema=oltp_schema,
+            tables=oltp_tables,
+            primary_keys=pk_dict,
+            foreign_keys=fk_dict
+        )
+
+        # Step 3: Load data in topological order
+        for tbl in topological_sort_tables(oltp_tables, fk_dict):
+            df = oltp_tables[tbl]
+            
+            # Validate PK columns exist
+            for pk in pk_dict.get(tbl, []):
+                if pk not in df.columns:
+                    raise ValueError(f"Missing PK column '{pk}' in table '{tbl}'")
+
+            print(f"📌 Loading: {tbl} — PK: {pk_dict.get(tbl)}, FK: {fk_dict.get(tbl, [])}")
+            upsert_dataframe_to_table(
+                conn,
+                df,
+                table_name=tbl,
+                schema=oltp_schema,
+                pk_cols=pk_dict.get(tbl, [])
+            )
+
+        print(f"✅ ETL pipeline complete for: {dataset_key}")
+        logging.info(f"✅ ETL complete for '{dataset_key}'")
+
+    except Exception as e:
+        logging.error(f"❌ ETL failed: {e}")
+        print(f"❌ Pipeline failed: {e}")
+        status["success"] = False
+
+    status["end_time"] = datetime.now().isoformat()
+    return status
+
+
+def run_dynamic_etl_pipeline2(
+    conn,
+    dataset_key: str,
+    raw_df: pd.DataFrame,
+    cfg: dict,
+    oltp_tables: Optional[Dict[str, pd.DataFrame]] = None,
+    pk_dict: Optional[Dict[str, List[str]]] = None,
+    fk_dict: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
+    sk_dict: Optional[Dict[str, List[str]]] = None
+) -> Dict[str, any]:
+    """
+    Main ETL pipeline: handles OLTP + OLAP with surrogate key, index support, and config-based calculations.
+    """
+    logging.info(f"🚀 Starting ETL pipeline for: {dataset_key}")
+    status = {"start_time": datetime.now().isoformat(), "stages": {}, "success": True}
+
+    oltp_schema = cfg["oltp"].get("schema", "oltp")
+
+    try:
+        # Step 1: Transform
+        if oltp_tables is None:
+            print("🔁 Transforming data...")
+            oltp_tables, pk_dict, fk_dict, sk_dict = transform_oltp(dataset_key, cfg, raw_df)
+        elif not pk_dict or not fk_dict:
+            raise ValueError("Must provide pk_dict and fk_dict when passing oltp_tables")
+
+        # Step 2: Create OLTP schema and tables
+        print("🧱 Creating OLTP schema and tables...")
+        if "olap" in cfg.get("pipelines", {}):
+            create_olap_schema_and_tables(
+                conn,
+                schema=oltp_schema,
+                tables=oltp_tables,
+                primary_keys=pk_dict,
+                foreign_keys=fk_dict,
+                surrogate_keys=sk_dict
+            )
+        else:
+            create_oltp_schema_and_tables(
+                conn,
+                schema=oltp_schema,
+                tables=oltp_tables,
+                primary_keys=pk_dict,
+                foreign_keys=fk_dict
+            )
+        status["stages"]["oltp_schema_and_tables"] = "✅ OLTP schema and tables created"
+
+        # Step 3: Load OLTP tables
+        print("📥 Loading OLTP data...")
+        for tbl in topological_sort_tables(oltp_tables, fk_dict):
+            df = oltp_tables[tbl]
+            for pk in pk_dict.get(tbl, []):
+                if pk not in df.columns:
+                    raise ValueError(f"Missing PK column '{pk}' in table '{tbl}'")
+            print(f"📌 Loading: {tbl} — PK: {pk_dict.get(tbl)}, FK: {fk_dict.get(tbl, [])}")
+            upsert_dataframe_to_table(conn, df, table_name=tbl, schema=oltp_schema, pk_cols=pk_dict.get(tbl, []))
+        status["stages"]["oltp_data_loaded"] = "✅ OLTP data loaded"
+
+        # Step 4: Optional OLAP
+        if "olap" in cfg:
+            user_input = input("🟨 Proceed to OLAP pipeline? (yes/no): ").strip().lower()
+            if user_input != "yes":
+                print("⏸️ Skipping OLAP pipeline.")
+                status["stages"]["olap_skipped"] = "⏸️ OLAP pipeline skipped"
+                status["end_time"] = datetime.now().isoformat()
+                return status
+
+            print("📊 Proceeding with OLAP pipeline...")
+            olap_cfg = cfg["olap"]
+            olap_schema = olap_cfg.get("schema", "olap")
+            dimension_defs = olap_cfg.get("dimensions", {})
+            fact_defs = olap_cfg.get("facts", {})
+
+            # Ensure OLAP schema
+            with conn.cursor() as cur:
+                cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{olap_schema}";')
+                conn.commit()
+            status["stages"]["olap_schema_created"] = f"✅ OLAP schema '{olap_schema}' created"
+
+            # Step 4a: Evaluate fact field calculations from config
+            for fact_name, fields in fact_defs.items():
+                source_name = fact_name.replace("fact_", "")
+                if source_name in oltp_tables:
+                    df = oltp_tables[source_name]
+                    for field in fields:
+                        if isinstance(field, dict):
+                            for new_col, expr in field.items():
+                                if new_col not in df.columns:
+                                    try:
+                                        df[new_col] = pd.eval(expr, local_dict=df.to_dict("series"))
+                                        df[new_col] = df[new_col].round(2)
+                                        print(f"🧮 Calculated '{new_col}' in '{source_name}' using '{expr}'")
+                                    except Exception as e:
+                                        print(f"⚠️ Failed to calculate '{new_col}' in '{source_name}': {e}")
+
+            # ⏩ Copy date_dim from OLTP to OLAP schema if it exists
+            if "date_dim" in oltp_tables:
+                print("📅 Copying date_dim to OLAP schema...")
+                upsert_dataframe_to_table(
+                    conn,
+                    oltp_tables["date_dim"],
+                    table_name="date_dim",
+                    schema=olap_schema,
+                    pk_cols=["date_id"]
+                )
+            
+            # OLAP Step 1: Load dimensions
+            print("📐 Building and loading dimension tables...")
+            dim_lookups = build_and_load_all_dimensions(conn, oltp_tables, dimension_defs, schema=olap_schema)
+            status["stages"]["dimensions_loaded"] = "✅ Dimension tables loaded"
+
+            # OLAP Step 2: Load facts and collect fact lookups
+            print("📦 Building and loading fact tables...")
+            fact_lookups = build_and_load_all_facts(conn, oltp_tables, fact_defs, dim_lookups, schema=olap_schema)
+            status["stages"]["facts_loaded"] = "✅ Fact tables loaded"
+
+            # Re-add relationships to facts (now that all tables exist)
+            if "olap_foreign_keys" in cfg:
+                ensure_schema_and_tables(
+                    conn,
+                    schema=olap_schema,
+                    tables={**dim_lookups, **fact_lookups, "date_dim": oltp_tables["date_dim"]},
+                    primary_keys={},  # Already added
+                    foreign_keys=cfg["olap_foreign_keys"]
+                )
+                status["stages"]["olap_foreign_keys_added"] = "✅ OLAP foreign keys added"
+
+            # OLAP Step 3: Index SKs/date_ids
+            print("🔧 Creating indexes on SKs and date_ids...")
+            olap_tables = {**dim_lookups, **fact_lookups}
+            generate_indexes_on_sk_and_date_ids(conn, olap_tables, schema=olap_schema)
+            status["stages"]["indexes_created"] = "✅ Indexes created"
+
+        # Final: Always index OLTP if sk_dict present
+        if sk_dict:
+            print("🔧 Creating indexes on SKs/date_ids in OLTP...")
+            generate_indexes_on_sk_and_date_ids(conn, oltp_tables, schema=oltp_schema)
+            status["stages"]["oltp_indexes_created"] = "✅ OLTP indexes created"
+
+        print("✅ ETL pipeline complete.")
+        logging.info("✅ ETL pipeline finished.")
+
+    except Exception as e:
+        logging.error(f"❌ ETL failed: {e}")
+        print(f"❌ Pipeline failed: {e}")
+        status["success"] = False
+
+    status["end_time"] = datetime.now().isoformat()
+    return status
+
+def create_olap_schema_and_tables(
+    conn,
+    schema: str,
+    tables: Dict[str, pd.DataFrame],
+    primary_keys: Dict[str, List[str]] = {},
+    foreign_keys: Dict[str, List[Tuple[str, str, str]]] = {}
+) -> None:
+    """Create OLAP schema and apply FK constraints on dimension/fact tables"""
+    print(f"📊 Creating OLAP schema: {schema}")
+    cur = conn.cursor()
+
+    # Ensure schema exists
+    cur.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s", (schema,))
+    if not cur.fetchone():
+        cur.execute(f'CREATE SCHEMA "{schema}"')
+        print(f"📁 Created schema: {schema}")
+
+    # Create tables with proper type handling for OLAP
+    for table_name, df in tables.items():
+        print(f"\n🔁 Creating table '{table_name}'...")
+        
+        # Convert Int64 columns to regular integers
+        df_copy = df.copy()
+        for col in df_copy.columns:
+            if str(df_copy[col].dtype) in ('Int64', 'Int64Dtype()', 'Int32', 'Int32Dtype()'):
+                df_copy[col] = df_copy[col].astype('int64')
+
+        # Generate column definitions
+        column_defs = []
+        for col in df_copy.columns:
+            sql_type = generate_sql_type(str(df_copy[col].dtype))
+            
+            # Override type for specific OLAP columns
+            if col.endswith('_sk') or col.endswith('date_id'):
+                sql_type = 'INTEGER'
+            
+            column_defs.append(f'"{col}" {sql_type}')
+
+        # Add primary key if exists
+        if table_name in primary_keys:
+            pk_cols = primary_keys[table_name]
+            quoted_cols = [f'"{col}"' for col in pk_cols]
+            pk_def = f"PRIMARY KEY ({', '.join(quoted_cols)})"
+            column_defs.append(pk_def)
+
+        # Create table
+        create_stmt = (
+            f'CREATE TABLE IF NOT EXISTS "{schema}"."{table_name}" ('
+            + ','.join(column_defs)
+            + ')'
+        )
+        
+        try:
+            cur.execute(create_stmt)
+            print(f"✅ Created table: {table_name}")
+        except Exception as e:
+            print(f"❌ Failed to create table {table_name}: {str(e)}")
+            raise
+
+    # Apply FK constraints after all tables are created
+    for from_table, fks in foreign_keys.items():
+        for fk_col, to_table, to_col in fks:
+            constraint_name = f"fk_{from_table}_{fk_col}_to_{to_table}_{to_col}"
+
+            # Skip if constraint already exists
+            cur.execute("""
+                SELECT 1 FROM information_schema.table_constraints
+                WHERE constraint_schema = %s AND table_name = %s AND constraint_name = %s
+            """, (schema, from_table, constraint_name))
+            
+            if cur.fetchone():
+                print(f"⏩ FK exists: {constraint_name} — skipping")
+                continue
+
+            try:
+                # Create foreign key constraint
+                fk_stmt = (
+                    f'ALTER TABLE "{schema}"."{from_table}" '
+                    f'ADD CONSTRAINT "{constraint_name}" '
+                    f'FOREIGN KEY ("{fk_col}") '
+                    f'REFERENCES "{schema}"."{to_table}" ("{to_col}")'
+                )
+                cur.execute(fk_stmt)
+                print(f"🔗 Enforced FK: {from_table}.{fk_col} → {to_table}.{to_col}")
+            except Exception as e:
+                print(f"❌ FK failed: {from_table}.{fk_col} → {to_table}.{to_col} — {e}")
+
+    conn.commit()
+    cur.close()
+    print("✅ OLAP schema and constraints applied.\n")
