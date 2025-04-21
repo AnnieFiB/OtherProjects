@@ -31,6 +31,9 @@ outputs/
 results/
 *.csv
 *.xlsx
+.temp_kaggle
+*.html
+
 
 # OS and editor files
 .DS_Store

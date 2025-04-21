@@ -10,12 +10,14 @@ ls -la venv/bin
 ```
 
 ./cleanup.sh
+jupyter lab
 
 Activate the virtual environment:
 
 ```sh
 source myenv/bin/activate  # On macOS/Linux
 ```
+
 
 ## Installing Dependencies
 
@@ -145,6 +147,14 @@ https://www.kaggle.com/discussions/getting-started/256014
 
 git status              
 git add DataEngineering/DataModelling
-git commit -m "etl(oltp) commitd"
-git commit -m "yanki e-comm ETL cmpltd (PostgreSQL)"
+git commit -m "deng struct uptd"
+git commit -m "modular ETL pipeline cmpltd (PostgreSQL)"
 git push                 
+git commit -m "sales performance analysis dash.pbix"
+
+streamlit run retailx_streamlit_dashboard_env_ready.py
+python -m streamlit run retailx_streamlit_dashboard_env_ready.py
+
+
+git add DataAnalysis
+git commit -m "bank telemarketing ntbk updtd"

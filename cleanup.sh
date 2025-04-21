@@ -14,7 +14,7 @@ echo "[2/7] Removing Python cache files (.pyc, .pyo)..."
 FILE_COUNT=$(find . -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.pyd" \) -delete -print | wc -l)
 echo "  ✔ Removed $FILE_COUNT Python cache files"
 
-echo "[3/7] Removing temporary files (.tmp, ~$*)..."
+echo "[3/7] Removing temporary files (.tmp,.temp, ~$*)..."
 TMP_COUNT=$(find . -type f \( -name "*.tmp" -o -name "*~" \) -delete -print | wc -l)
 echo "  ✔ Removed $TMP_COUNT temporary files"
 
