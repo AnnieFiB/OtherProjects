@@ -158,3 +158,6 @@ python -m streamlit run retailx_streamlit_dashboard_env_ready.py
 
 git add DataAnalysis
 git commit -m "bank telemarketing ntbk updtd"
+git commit -m "modular ETL pipeline cmpltd (PostgreSQL)"
+git push                 
+git commit -m "dwh ETL pipeline cmpltd (server based and serverless designs)"
