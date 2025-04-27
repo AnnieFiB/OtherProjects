@@ -26,7 +26,10 @@ import kaggle
 from io import BytesIO
 from kaggle.api.kaggle_api_extended import KaggleApi
 import zipfile
-from graphviz import Digraph
+import sqlite3
+from sqlalchemy import create_engine
+import pymysql
+
 os.environ["PATH"] += os.pathsep + r"C:\Program Files\Graphviz\bin"
 
 
@@ -36,9 +39,9 @@ load_dotenv() # Load environment variables from .env file
 # ==================================== DB CONNECTION =========================================
 
 # Establish a PostgreSQL connection using environment variables
-def get_db_connection(env_prefix: str = "DB_") -> psycopg2.extensions.connection:
+def get_db_connection(env_prefix: str = "DB_") -> tuple[psycopg2.extensions.connection, psycopg2.extensions.cursor]:
     """
-    Establish a PostgreSQL connection using environment variables with a specified prefix.
+    Establish a PostgreSQL connection and cursor using environment variables with a specified prefix.
 
     Parameters:
     - env_prefix (str): Prefix for environment variable keys (e.g., 'DB_', 'STAGE_DB_', etc.)
@@ -51,7 +54,10 @@ def get_db_connection(env_prefix: str = "DB_") -> psycopg2.extensions.connection
     - {PREFIX}NAME
 
     Returns:
-    - psycopg2 connection object or None if connection fails
+    - tuple containing:
+        - psycopg2 connection object
+        - psycopg2 cursor object
+    - or (None, None) if connection fails
     """
     load_dotenv()
 
@@ -69,12 +75,264 @@ def get_db_connection(env_prefix: str = "DB_") -> psycopg2.extensions.connection
             port=port,
             database=database
         )
+        cur = conn.cursor()
         print(f"[get_db_connection] ✅ Connected to '{conn.dsn}' using prefix '{env_prefix}'")
         
-        return conn
+        return conn, cur
     except Exception as e:
         print(f"[get_db_connection] ❌ Failed to connect using prefix '{env_prefix}': {e}")
-        return None
+        return None, None
+
+def check_and_create_db(db_params):
+    """
+    Connect to the default 'postgres' database,
+    check if the target database exists,
+    and create it if it does not exist.
+    Then close the connection.
+    """
+    try:
+        # Connect to default 'postgres' database
+        default_db_url = f"postgresql://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/postgres"
+        conn = psycopg2.connect(default_db_url)
+        conn.autocommit = True
+        cur = conn.cursor()
+
+        # Check if target database exists
+        cur.execute(
+            sql.SQL("SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s"),
+            [db_params['dbname']]
+        )
+        exists = cur.fetchone()
+
+        if not exists:
+            # Create the database
+            cur.execute(
+                sql.SQL("CREATE DATABASE {}").format(
+                    sql.Identifier(db_params['dbname'])
+                )
+            )
+            print(f"Database '{db_params['dbname']}' created successfully.")
+        else:
+            print(f"Database '{db_params['dbname']}' already exists.")
+
+        # Close connection to default database
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def close_connection(conn, cur):
+    """
+    Safely close the cursor and connection.
+    """
+    try:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+        print("Connection closed successfully.")
+    except Exception as e:
+        print(f"Error while closing connection: {e}")
+
+def run_sql_script(conn, sql_file_path):
+    try:
+        with conn.cursor() as cur:
+            with open(sql_file_path, 'r') as file:
+                sql_script = file.read()
+            cur.execute(sql_script)
+            conn.commit()
+        print(f"Executed SQL script from {sql_file_path} successfully.")
+    except Exception as e:
+        print(f"Error running SQL script: {e}")
+
+def create_dwh_schema(conn, sql_file_path: str, schemas: dict) -> None:
+    """
+    Create tables in existing schemas using SQL file.
+    
+    Args:
+        conn: PostgreSQL connection
+        sql_file_path: Path to the SQL file containing table definitions
+        schemas: Dictionary of schema names to use, e.g. {'oltp_schema': 'public', 'olap_schema': 'zulo_olap'}
+    """
+    try:
+        with conn.cursor() as cur:
+            print("\n=== Creating Tables ===")
+            with open(sql_file_path, 'r') as f:
+                sql_content = f.read()
+                
+                # Replace schema placeholders with actual schema names
+                sql_content = sql_content.format(**schemas)
+                
+                # Execute each statement
+                for statement in sql_content.split(';'):
+                    if statement.strip():
+                        if 'CREATE TABLE' in statement:
+                            # Extract table name for logging
+                            parts = statement.split('"')
+                            if len(parts) >= 4:
+                                schema_name = parts[1]
+                                table_name = parts[3]
+                                print(f"✅ Creating table: {schema_name}.{table_name}")
+                        
+                        cur.execute(statement)
+            
+            conn.commit()
+            print("\n=== Table Creation Complete ===")
+
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        conn.rollback()
+        raise
+
+def upsert_from_df(conn, df, table_name: str, schema: str = "zulo_oltp") -> None:
+    """
+    Simple upsert function for existing tables.
+    Uses existing primary key constraints for upsert operations.
+    Handles NumPy types, composite keys, and string length validation.
+    
+    Args:
+        conn: PostgreSQL connection
+        df: pandas DataFrame containing the data
+        table_name: Name of the table to upsert into
+        schema: Schema name
+    """
+    if df.empty:
+        print(f"⚠️ DataFrame is empty for table {table_name}")
+        return
+        
+    try:
+        with conn.cursor() as cur:
+            # Get column information including data types and lengths
+            cur.execute(f'''
+                SELECT column_name, data_type, character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = '{schema}'
+                AND table_name = '{table_name}';
+            ''')
+            column_info = {row[0]: (row[1], row[2]) for row in cur.fetchall()}
+            
+            # Get primary key columns from the table
+            cur.execute(f'''
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                WHERE i.indrelid = '{schema}.{table_name}'::regclass
+                AND i.indisprimary;
+            ''')
+            pk_columns = [row[0] for row in cur.fetchall()]
+            
+            if not pk_columns:
+                raise ValueError(f"No primary key found for table {schema}.{table_name}")
+            
+            # Get column names from DataFrame
+            columns = df.columns.tolist()
+            
+            # Create placeholders and column names strings
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(f'"{col}"' for col in columns)
+            
+            # Create the INSERT ... ON CONFLICT query
+            pk_str = ', '.join(f'"{col}"' for col in pk_columns)
+            update_columns = [col for col in columns if col not in pk_columns]
+            
+            # For composite keys, we need to handle the ON CONFLICT differently
+            if len(pk_columns) > 1:
+                # For composite keys, we don't update anything on conflict
+                query = f'''
+                    INSERT INTO "{schema}"."{table_name}" ({column_names})
+                    VALUES ({placeholders})
+                    ON CONFLICT ({pk_str}) DO NOTHING
+                '''
+            else:
+                # For single primary key, we can update non-PK columns
+                update_str = ', '.join(f'"{col}" = EXCLUDED."{col}"' for col in update_columns)
+                query = f'''
+                    INSERT INTO "{schema}"."{table_name}" ({column_names})
+                    VALUES ({placeholders})
+                    ON CONFLICT ({pk_str}) DO UPDATE SET {update_str}
+                '''
+            
+            # Convert DataFrame to list of tuples, handling NumPy types and string lengths
+            values = []
+            for _, row in df.iterrows():
+                row_values = []
+                for col, value in row.items():
+                    if pd.isna(value):
+                        row_values.append(None)
+                    elif hasattr(value, 'item'):  # For NumPy types
+                        row_values.append(value.item())
+                    elif isinstance(value, str) and col in column_info:
+                        data_type, max_length = column_info[col]
+                        if data_type == 'character varying' and max_length is not None:
+                            # Truncate string if it exceeds max length
+                            row_values.append(value[:max_length])
+                        else:
+                            row_values.append(value)
+                    else:
+                        row_values.append(value)
+                values.append(tuple(row_values))
+            
+            # Execute the query
+            cur.executemany(query, values)
+            conn.commit()
+            
+            print(f"✅ Successfully upserted {len(df)} records into {schema}.{table_name}")
+            
+    except Exception as e:
+        print(f"❌ Error upserting records: {e}")
+        conn.rollback()
+        raise
+
+def upsert_from_file(conn,file_path: str, table_name: str, key_column: str) -> None:
+    """
+    Update only changed records and insert new ones from CSV.
+    """
+    try:
+        # Read CSV
+        df = pd.read_csv(file_path)
+        print(f"📖 Read {len(df)} rows from {file_path}")
+        
+        # Create temp table and load new data
+        temp_table = f"temp_{table_name}"
+        df.to_sql(temp_table, conn, if_exists='replace', index=False)
+        
+        # Get column names except key column
+        columns = [col for col in df.columns if col != key_column]
+        
+        # Update only rows that changed
+        update_conditions = [
+            f"{table_name}.{col} IS NOT {temp_table}.{col}" 
+            for col in columns
+        ]
+        
+        cursor = conn.cursor()
+        cursor.execute(f"""
+            UPDATE {table_name} 
+            SET {', '.join(f'{col} = {temp_table}.{col}' for col in columns)}
+            FROM {temp_table}
+            WHERE {table_name}.{key_column} = {temp_table}.{key_column}
+            AND ({' OR '.join(update_conditions)})
+        """)
+        updates = cursor.rowcount
+        
+        # Insert new records
+        cursor.execute(f"""
+            INSERT INTO {table_name}
+            SELECT * FROM {temp_table}
+            WHERE {key_column} NOT IN (SELECT {key_column} FROM {table_name})
+        """)
+        inserts = cursor.rowcount
+        
+        # Cleanup
+        cursor.execute(f"DROP TABLE {temp_table}")
+        conn.commit()
+        
+        print(f"✅ Updated {updates} changed records")
+        print(f"✅ Inserted {inserts} new records")
+            
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
 
 # ==================== 1. Load raw → normalized OLTP tables =========== #
 
@@ -1560,6 +1818,117 @@ def generate_erd_graph(
     
     return dot
 
+def generate_zulo_erd() -> Digraph:
+    """
+    Generate an ERD for the ZULO banking system showing relationships between OLTP and OLAP tables.
+    """
+    # Create a new directed graph
+    dot = Digraph('ZULO Banking System ERD')
+    dot.attr(rankdir='LR')
+    dot.attr('node', shape='box', style='rounded')
+
+    # Define table columns for better visualization
+    table_columns = {
+        "oltp.transaction": [
+            "transaction_id", "transaction_type", "amount", 
+            "transaction_date", "transaction_date_id", "transaction_sk"
+        ],
+        "oltp.loan": [
+            "loan_id", "loan_amount", "loan_type", "start_date", 
+            "start_date_id", "end_date", "end_date_id", "interest_rate", "loan_sk"
+        ],
+        "oltp.account": [
+            "account_id", "account_type", "balance", 
+            "opening_date", "opening_date_id", "account_sk"
+        ],
+        "oltp.customer": [
+            "customer_id", "first_name", "last_name", 
+            "email", "phone", "customer_sk"
+        ],
+        "oltp.zulo_lookup": [
+            "customer_sk", "account_sk", 
+            "transaction_sk", "loan_sk"
+        ],
+        "olap.date_dim": [
+            "date", "date_id", "year", "month", 
+            "month_name", "quarter", "day", "day_of_week", 
+            "is_weekend", "is_month_end"
+        ],
+        "olap.transaction_dim": [
+            "transaction_sk", "transaction_type"
+        ],
+        "olap.account_dim": [
+            "account_sk", "account_type"
+        ],
+        "olap.customer_dim": [
+            "customer_sk", "first_name", "last_name", 
+            "email", "phone"
+        ],
+        "olap.loan_dim": [
+            "loan_sk", "loan_type"
+        ],
+        "olap.loan_fact": [
+            "loan_sk", "customer_sk", "start_date_id", 
+            "end_date_id", "loan_amount", "interest"
+        ],
+        "olap.transaction_fact": [
+            "transaction_sk", "account_sk", "opening_date_id", 
+            "transaction_date_id", "amount", "balance"
+        ]
+    }
+
+    # Add nodes for each table with their columns
+    for table, columns in table_columns.items():
+        # Create a table-like structure for the node label
+        label = f"<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>"
+        label += f"<TR><TD COLSPAN='2' BGCOLOR='lightblue'><B>{table}</B></TD></TR>"
+        for col in columns:
+            label += f"<TR><TD ALIGN='LEFT'>{col}</TD></TR>"
+        label += "</TABLE>>"
+        
+        # Add the node to the graph with schema-specific styling
+        if table.startswith("oltp."):
+            dot.node(table, label, color='blue')
+        else:
+            dot.node(table, label, color='green')
+
+    # Define and add relationships
+    relationships = [
+        # OLTP relationships
+        ("oltp.zulo_lookup", "oltp.customer", "customer_sk"),
+        ("oltp.zulo_lookup", "oltp.loan", "loan_sk"),
+        ("oltp.zulo_lookup", "oltp.account", "account_sk"),
+        ("oltp.zulo_lookup", "oltp.transaction", "transaction_sk"),
+        
+        # OLAP relationships
+        ("olap.customer_dim", "oltp.zulo_lookup", "customer_sk"),
+        ("olap.loan_dim", "oltp.zulo_lookup", "loan_sk"),
+        ("olap.account_dim", "oltp.zulo_lookup", "account_sk"),
+        ("olap.transaction_dim", "oltp.zulo_lookup", "transaction_sk"),
+        
+        # Fact table relationships
+        ("olap.loan_fact", "olap.customer_dim", "customer_sk"),
+        ("olap.loan_fact", "olap.loan_dim", "loan_sk"),
+        ("olap.loan_fact", "olap.date_dim", "start_date_id"),
+        ("olap.loan_fact", "olap.date_dim", "end_date_id"),
+        ("olap.transaction_fact", "olap.customer_dim", "customer_sk"),
+        ("olap.transaction_fact", "olap.account_dim", "account_sk"),
+        ("olap.transaction_fact", "olap.transaction_dim", "transaction_sk"),
+        ("olap.transaction_fact", "olap.date_dim", "transaction_date_id"),
+        ("olap.transaction_fact", "olap.date_dim", "opening_date_id")
+    ]
+
+    # Add edges for each relationship with schema-specific styling
+    for from_table, to_table, key in relationships:
+        if from_table.startswith("oltp.") and to_table.startswith("oltp."):
+            dot.edge(from_table, to_table, label=key, color='blue')
+        elif from_table.startswith("olap.") and to_table.startswith("olap."):
+            dot.edge(from_table, to_table, label=key, color='green')
+        else:
+            dot.edge(from_table, to_table, label=key, color='red', style='dashed')
+
+    return dot
+
 # ================================ Validation & QA===================================
 #  this step ensures facts and dimensions are not just created — but reliable and ready for BI tools, dashboards, or data science.
 def qa_runner_with_pass(
@@ -1738,3 +2107,4 @@ def save_tables_to_csv(tables: Dict[str, pd.DataFrame], export_dir: str) -> Dict
 # df = read_data("https://example.com/data.csv")  # URL (auto-detected)
 # df.head()
 '''
+
