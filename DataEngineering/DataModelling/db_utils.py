@@ -371,13 +371,19 @@ def read_data(source: str, source_type: str = 'auto') -> pd.DataFrame:
     
 def fetch_kaggle_dataset_by_path(path: str, temp_dir=".temp_kaggle") -> dict:
     """
-    Downloads a Kaggle dataset using a known path and lets the user pick the file to load.
-    Sets `raw_df` and `dataset_key` globally once loaded.
+    Downloads a Kaggle dataset by path and lets the user select one CSV file at a time to load.
+    Sets `raw_df` and optionally links `dataset_key` and `cfg` if ETL_CONFIG exists.
+
+    Parameters:
+    - path (str): Kaggle dataset path (e.g., 'username/dataset-name')
+    - temp_dir (str): Temporary download directory
+
+    Returns:
+    - dict with keys: raw_df, selected_source
     """
-  
     result = {"raw_df": None, "selected_source": None}
 
-    print(f"📦 Loading Kaggle dataset using search: {path}")
+    print(f"📦 Fetching Kaggle dataset: {path}")
     
     os.makedirs(temp_dir, exist_ok=True)
     kaggle.api.authenticate()
@@ -385,7 +391,7 @@ def fetch_kaggle_dataset_by_path(path: str, temp_dir=".temp_kaggle") -> dict:
 
     csv_files = [f for f in os.listdir(temp_dir) if f.endswith(".csv")]
     if not csv_files:
-        print("❌ No CSV files found.")
+        print("❌ No CSV files found in the dataset.")
         return result
 
     dropdown = widgets.Dropdown(
@@ -397,6 +403,7 @@ def fetch_kaggle_dataset_by_path(path: str, temp_dir=".temp_kaggle") -> dict:
 
     def load_file_callback(_):
         with output:
+            output.clear_output()
             selected_file = dropdown.value
             file_path = os.path.join(temp_dir, selected_file)
             try:
@@ -404,25 +411,38 @@ def fetch_kaggle_dataset_by_path(path: str, temp_dir=".temp_kaggle") -> dict:
                 result["raw_df"] = df
                 result["selected_source"] = path
 
-                # Set global vars
+                # Set global raw_df
                 builtins.raw_df = df
-                builtins.dataset_key = [k for k, v in ETL_CONFIG["data_sources"].items() if v.get("path") == path][0]
-                builtins.cfg = ETL_CONFIG["data_sources"][builtins.dataset_key]
 
-                print(f"✅ Loaded: {selected_file}")
-                print("📊 Shape:", df.shape)
+                # Link ETL config if defined
+                if "ETL_CONFIG" in globals():
+                    matched_keys = [
+                        k for k, v in ETL_CONFIG.get("data_sources", {}).items()
+                        if v.get("path") == path
+                    ]
+                    if matched_keys:
+                        builtins.dataset_key = matched_keys[0]
+                        builtins.cfg = ETL_CONFIG["data_sources"][builtins.dataset_key]
+                        print("🔗 Linked to ETL_CONFIG.")
+                    else:
+                        print("⚠️ No matching dataset_key found in ETL_CONFIG.")
+                else:
+                    print("ℹ️ ETL_CONFIG not defined. Skipping config linking.")
+
+                print(f"✅ Loaded file: {selected_file}")
+                print("📊 Data shape:", df.shape)
                 display(df.head(3))
                 display(df.info())
-                print("\n✅ You can now access raw_df, dataset_key, and cfg globally.")
+                print("\n✅ You can now access `raw_df` globally.")
 
-                shutil.rmtree(temp_dir)
             except Exception as e:
-                print(f"❌ Failed to load data: {e}")
+                print(f"❌ Failed to load {selected_file}: {e}")
 
     load_button.on_click(load_file_callback)
     display(dropdown, load_button, output)
-    print("🔄 Please select a file to load.")
-   
+    print("🔄 Select a file to load individually. You can rerun to load others.")
+
+    return result
 
 # ============================= DATA TRANSFORMATION (CLEANING)  =============================================
 

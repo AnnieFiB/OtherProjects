@@ -1,11 +1,17 @@
 
 ## feature_relevance_analysis.py and model_training_pipeline.py
 
+
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import random
+
+from sklearn.model_selection import StratifiedKFold, cross_val_predict, GridSearchCV, train_test_split, RandomizedSearchCV
 from sklearn.metrics import recall_score, f1_score, classification_report, confusion_matrix, roc_auc_score
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.naive_bayes import GaussianNB
@@ -14,26 +20,17 @@ from sklearn.neural_network import MLPClassifier
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
-from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.dummy import DummyClassifier
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.metrics import confusion_matrix, roc_curve, RocCurveDisplay, auc
-import joblib
-from sklearn.model_selection import GridSearchCV
-import shap
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
 from sklearn.feature_selection import mutual_info_classif
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-import random
-import numpy as np
 from imblearn.over_sampling import SMOTE
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import boxcox
+import joblib
+import shap
 
-
+    
 # Set global seeds
 np.random.seed(42)
 random.seed(42)
@@ -45,6 +42,114 @@ def encode_dataframe(df, target_column):
     for col in df_encoded.select_dtypes(include='object').columns:
         df_encoded[col] = LabelEncoder().fit_transform(df_encoded[col])
     return df_encoded
+
+def encode_categorical_features(
+    df,
+    binary_encode=True,
+    one_hot_encode=True,
+    label_encode_cols=None,
+    drop_original=True
+):
+    """
+    Encode categorical features:
+    - Binary encoding for binary categorical columns (0/1)
+    - One-hot encoding for multi-class columns
+    - Label encoding for user-specified columns
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame
+    - binary_encode (bool): Apply binary encoding to 2-class object columns
+    - one_hot_encode (bool): Apply one-hot encoding to multi-class object columns
+    - label_encode_cols (list): List of column names to label encode
+    - drop_original (bool): Whether to drop original categorical columns
+
+    Returns:
+    - df_encoded (pd.DataFrame): Transformed DataFrame with encoded variables
+    """
+   
+    df_encoded = df.copy()
+    cat_cols = [col for col in df_encoded.columns if df_encoded[col].dtype == 'object' or df_encoded[col].nunique() < 20]
+    label_encode_cols = label_encode_cols or []
+
+    for col in cat_cols:
+        unique_vals = df_encoded[col].dropna().unique()
+
+        if col in label_encode_cols:
+            # Label encoding
+            le = LabelEncoder()
+            df_encoded[col + '_label'] = le.fit_transform(df_encoded[col].astype(str))
+        
+        elif binary_encode and len(unique_vals) == 2:
+            # Binary encoding
+            mapping = {val: i for i, val in enumerate(sorted(unique_vals))}
+            df_encoded[col + '_bin'] = df_encoded[col].map(mapping)
+
+        elif one_hot_encode and len(unique_vals) > 2:
+            # One-hot encoding
+            dummies = pd.get_dummies(df_encoded[col], prefix=col, drop_first=True).astype(int)
+            df_encoded = pd.concat([df_encoded, dummies], axis=1)
+
+        if drop_original:
+            df_encoded.drop(columns=[col], inplace=True)
+
+    return df_encoded
+
+def apply_min_max_scaling(df, columns=None):
+    """
+    Apply Min-Max scaling to specified numeric columns.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame
+    - columns (list or None): List of columns to scale; if None, scales all numeric columns
+
+    Returns:
+    - df_scaled (pd.DataFrame): DataFrame with scaled columns
+    """
+
+    df_scaled = df.copy()
+    scaler = MinMaxScaler()
+
+    if columns is None:
+        columns = df_scaled.select_dtypes(include=['float64', 'int64']).columns.tolist()
+
+    df_scaled[columns] = scaler.fit_transform(df_scaled[columns])
+    return df_scaled
+
+def transform_skewed_features(df, method='log', exclude_zeros=True, threshold=1.0):
+    """
+    Transform skewed numeric features using log or Box-Cox.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame
+    - method (str): 'log' or 'boxcox'
+    - exclude_zeros (bool): If True, skips zero/negative values in log transformation
+    - threshold (float): Skewness threshold to apply transformation
+
+    Returns:
+    - df_transformed (pd.DataFrame): DataFrame with transformed features
+    """
+    
+
+    df_transformed = df.copy()
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+
+    for col in numeric_cols:
+        skewness = df[col].skew()
+        if abs(skewness) > threshold:
+            try:
+                if method == 'log':
+                    if exclude_zeros and (df[col] <= 0).any():
+                        continue
+                    df_transformed[col] = np.log1p(df[col])
+                elif method == 'boxcox':
+                    if (df[col] <= 0).any():
+                        continue  # Box-Cox requires strictly positive values
+                    df_transformed[col], _ = boxcox(df[col])
+            except Exception as e:
+                print(f"Skipping {col}: {e}")
+
+    return df_transformed
+
 
 def compute_random_forest_importance(df, target_column='y', top_n=20, plot=True):
     if df[target_column].dtype == 'object':
@@ -123,8 +228,7 @@ def compute_combined_feature_importance(df, target_column='y', top_n=20, plot=Tr
     return merged_df
 
 def prepare_features(df, target_column='y', drop_columns=None):
-    import pandas as pd
-
+  
     df = df.copy()
 
     if df[target_column].dtype == 'object':
@@ -148,7 +252,6 @@ def prepare_features(df, target_column='y', drop_columns=None):
     y = df[target_column]
 
     return X, y
-
 
 def scale_and_split(df, target_column='y', test_size=0.2, random_state=42):
     '''
@@ -203,9 +306,6 @@ def scale_train_test(X_train, X_test):
     X_test_scaled = pipeline.transform(X_test)
 
     return X_train_scaled, X_test_scaled, pipeline
-
-
-
 
 def balance_classes_smote(X, y, random_state=42):
     '''
@@ -281,9 +381,6 @@ def train_and_evaluate_models(X, y, selected_models=None, cv_splits=10):
 
     return results, trained_models
 
-
-
-
 def results_to_dataframe(results_dict):
     '''
     Convert evaluation metrics from model dictionary to a pandas DataFrame.
@@ -309,7 +406,6 @@ def results_to_dataframe(results_dict):
         rows.append(row)
 
     return pd.DataFrame(rows)
-
 
 def plot_model_evaluations(models, X_test, y_test):
     '''
@@ -361,7 +457,6 @@ def plot_model_evaluations(models, X_test, y_test):
 
     plt.tight_layout()
     plt.show()
-
 
 def load_models_and_params():
     """
@@ -449,8 +544,6 @@ def load_models_and_params():
 
     return models_and_params
 
-
-
 def tune_and_select_best_model(X_train, y_train, models_and_params, model_to_tune=None, save_path="best_model.pkl"):
     '''
     Tune a specified model using GridSearchCV and select the best estimator based on Recall.
@@ -506,7 +599,6 @@ def tune_and_select_best_model(X_train, y_train, models_and_params, model_to_tun
         print("⚠️ No valid model could be tuned.")
 
     return best_model, best_name, best_scores
-
 
 def explain_model_with_shap(model_path, X_sample, feature_names=None, max_display=10):
     '''

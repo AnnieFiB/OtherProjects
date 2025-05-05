@@ -14,6 +14,7 @@ jupyter lab
 
 Activate the virtual environment:
 
+
 ```sh
 source myenv/bin/activate  # On macOS/Linux
 ```

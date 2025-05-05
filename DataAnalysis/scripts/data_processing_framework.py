@@ -1,19 +1,20 @@
-import os
-import sys
+# data_processing_framework.py
+from ml_pipeline_utils import *
+import os, shutil, builtins, sys
 import kaggle
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 import requests
 from zipfile import ZipFile
 from io import BytesIO
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from scipy import stats
-import seaborn as sns
-import matplotlib.pyplot as plt
 from scipy.stats import chi2_contingency
 from scipy.stats import f_oneway
-
-
+from IPython.display import display, HTML
+import ipywidgets as widgets
 
 def fetch_kaggle_dataset(search_query="human resources"):
     """
@@ -43,7 +44,7 @@ def fetch_kaggle_dataset(search_query="human resources"):
         return None
 
     # Limit results to the top 5 datasets
-    top_datasets = search_result[:5]
+    top_datasets = search_result[:2]
 
     # Print dataset details and list available files
     print("\n🔹 Available Datasets:")
@@ -154,6 +155,81 @@ def fetch_kaggle_dataset(search_query="human resources"):
 
     return data
 
+def fetch_kaggle_dataset_by_path(path: str, temp_dir=".temp_kaggle") -> dict:
+    """
+    Downloads a Kaggle dataset by path and lets the user select one CSV file at a time to load.
+    Sets `raw_df` and optionally links `dataset_key` and `cfg` if ETL_CONFIG exists.
+
+    Parameters:
+    - path (str): Kaggle dataset path (e.g., 'username/dataset-name')
+    - temp_dir (str): Temporary download directory
+
+    Returns:
+    - dict with keys: raw_df, selected_source
+    """
+    result = {"raw_df": None, "selected_source": None}
+
+    print(f"📦 Fetching Kaggle dataset: {path}")
+    
+    os.makedirs(temp_dir, exist_ok=True)
+    kaggle.api.authenticate()
+    kaggle.api.dataset_download_files(path, path=temp_dir, unzip=True)
+
+    csv_files = [f for f in os.listdir(temp_dir) if f.endswith(".csv")]
+    if not csv_files:
+        print("❌ No CSV files found in the dataset.")
+        return result
+
+    dropdown = widgets.Dropdown(
+        options=csv_files,
+        description="Select File:"
+    )
+    load_button = widgets.Button(description="📥 Load Selected File")
+    output = widgets.Output()
+
+    def load_file_callback(_):
+        with output:
+            output.clear_output()
+            selected_file = dropdown.value
+            file_path = os.path.join(temp_dir, selected_file)
+            try:
+                df = pd.read_csv(file_path)
+                result["raw_df"] = df
+                result["selected_source"] = path
+
+                # Set global raw_df
+                builtins.raw_df = df
+
+                # Link ETL config if defined
+                if "ETL_CONFIG" in globals():
+                    matched_keys = [
+                        k for k, v in ETL_CONFIG.get("data_sources", {}).items()
+                        if v.get("path") == path
+                    ]
+                    if matched_keys:
+                        builtins.dataset_key = matched_keys[0]
+                        builtins.cfg = ETL_CONFIG["data_sources"][builtins.dataset_key]
+                        print("🔗 Linked to ETL_CONFIG.")
+                    else:
+                        print("⚠️ No matching dataset_key found in ETL_CONFIG.")
+                else:
+                    print("ℹ️ ETL_CONFIG not defined. Skipping config linking.")
+
+                print(f"✅ Loaded file: {selected_file}")
+                print("📊 Data shape:", df.shape)
+                display(df.head(3))
+                display(df.info())
+                print("\n✅ You can now access `raw_df` globally.")
+
+            except Exception as e:
+                print(f"❌ Failed to load {selected_file}: {e}")
+
+    load_button.on_click(load_file_callback)
+    display(dropdown, load_button, output)
+    print("🔄 Select a file to load individually. You can rerun to load others.")
+
+    return result
+
 def detect_columns(df):
     """Detect column types and return results in a DataFrame."""
     config = {
@@ -243,7 +319,6 @@ def clean_data(df, config, missing_strategy='fill'):
    
     return df
 
-
 def generate_autoviz_html_report(folder_name="reports_html", output_filename="AutoViz_Report.html"):
     folder_path = os.path.abspath(folder_name)
     html_path = os.path.join(folder_path, output_filename)
@@ -275,10 +350,9 @@ def generate_autoviz_html_report(folder_name="reports_html", output_filename="Au
     print(f"✅ AutoViz HTML report saved to: {html_path}")
     return html_path
 
-
 # chi_square_analysis.py
 
-def anova_test_numerical_features(df, numeric_columns, target_column='churn', plot=True):
+def anova_test_numerical_features1(df, numeric_columns, target_column='churn', plot=True):
     '''
     Perform ANOVA test for numerical columns against a binary target variable and plot histograms.
     Converts target to binary 0/1 if it's not numeric.
@@ -336,6 +410,64 @@ def anova_test_numerical_features(df, numeric_columns, target_column='churn', pl
 
     return pd.DataFrame(results)
 
+def anova_test_numerical_features(df, target_column='churn', plot=True):
+    '''
+    Perform ANOVA test for numerical columns against a binary target variable and plot histograms.
+    Converts target to binary 0/1 if it's not numeric.
+
+    Parameters:
+    - df: pandas DataFrame
+    - target_column: binary target variable (e.g., 'churn')
+    - plot: whether to show distribution histograms
+
+    Returns:
+    - results_df: DataFrame with p-values and significance flags
+    '''
+    
+    results = []
+
+    # Ensure target is binary (0 and 1)
+    target_values = set(df[target_column].dropna().unique())
+    if target_values <= {0, 1}:
+        pass  # Already valid binary
+    elif target_values == {'yes', 'no'}:
+        df[target_column] = df[target_column].map({'no': 0, 'yes': 1})
+    else:
+        raise ValueError(f"Target column '{target_column}' must be binary with values 0/1 or 'yes'/'no'. Found: {target_values}")
+
+    # Auto-infer numeric columns (excluding the target)
+    numeric_columns = df.select_dtypes(include=['int64', 'float64']).columns.drop(target_column, errors='ignore')
+
+    for col in numeric_columns:
+        if df[col].nunique() <= 1:
+            continue
+        try:
+            group1 = df[df[target_column] == 0][col].dropna()
+            group2 = df[df[target_column] == 1][col].dropna()
+            f_stat, p_value = f_oneway(group1, group2)
+            significant = p_value < 0.05
+            results.append({
+                'feature': col,
+                'p_value': round(p_value, 4),
+                'significant': significant
+            })
+
+            if plot:
+                plt.figure(figsize=(8, 4))
+                sns.histplot(data=df, x=col, hue=target_column, kde=True, element='step')
+                plt.title(f'{col} Distribution by {target_column} (p={p_value:.4f})')
+                plt.tight_layout()
+                plt.show()
+
+        except Exception as e:
+            results.append({
+                'feature': col,
+                'p_value': None,
+                'significant': False,
+                'error': str(e)
+            })
+
+    return pd.DataFrame(results)
 
 
 def chi_square_test(df, cat_column, target_column='churn', plot=True):
@@ -409,7 +541,6 @@ def chi_square_test_batch(df, cat_columns, target_column='churn', plot=False):
 
     return pd.DataFrame(results)
 
-
 def plot_significant_categorical_proportions(df, significant_features, target_column='churn'):
     '''
     Plots proportion bar charts of significant categorical features vs the target (e.g., churn),
@@ -420,8 +551,6 @@ def plot_significant_categorical_proportions(df, significant_features, target_co
     - significant_features: list of features to plot
     - target_column: the target variable to compare against
     '''
-    import seaborn as sns
-    import matplotlib.pyplot as plt
 
     for col in significant_features:
         if col not in df.columns:
@@ -464,6 +593,18 @@ def detect_outliers(data, column):
 
 # Cap outliers in a single column
 def cap_outliers(data, column):
+    """
+    Cap outliers in a column using IQR method and provide status messages.
+    
+    Parameters:
+    - data: DataFrame
+    - column: Column name to process
+    
+    Returns:
+    - DataFrame with capped values
+    """
+    print(f"\nProcessing {column} for outliers...")
+    
     Q1 = data[column].quantile(0.25)
     Q3 = data[column].quantile(0.75)
     IQR = Q3 - Q1
@@ -471,8 +612,21 @@ def cap_outliers(data, column):
     lower_bound = Q1 - 1.5 * IQR
     upper_bound = Q3 + 1.5 * IQR
 
+    # Count outliers before capping
+    outliers_before = data[(data[column] < lower_bound) | (data[column] > upper_bound)][column]
+    outlier_count = len(outliers_before)
+    outlier_percentage = (outlier_count / len(data)) * 100
+
+    print(f"Found {outlier_count} outliers ({outlier_percentage:.2f}% of data)")
+    print(f"Lower bound: {lower_bound:.2f}, Upper bound: {upper_bound:.2f}")
+
     capped = data.copy()
     capped[column] = capped[column].clip(lower=lower_bound, upper=upper_bound)
+
+    # Count outliers after capping
+    outliers_after = capped[(capped[column] < lower_bound) | (capped[column] > upper_bound)][column]
+    print(f"Remaining outliers after capping: {len(outliers_after)}")
+    
     return capped
 
 # Detect outliers in all numeric columns
@@ -488,15 +642,28 @@ def detect_outliers_all(df):
     
     return pd.DataFrame.from_dict(outlier_summary, orient='index', columns=['outlier_count'])
 
-
 # Cap outliers in all numeric columns
 def cap_outliers_all(df):
+    """
+    Cap outliers in all numeric columns of the DataFrame.
+    
+    Parameters:
+    - df: DataFrame to process
+    
+    Returns:
+    - DataFrame with capped values
+    """
+    print("\n=== Starting Outlier Capping Process ===")
+    print(f"Total columns to process: {len(df.select_dtypes(include='number').columns)}")
+    
     df_capped = df.copy()
     numeric_cols = df_capped.select_dtypes(include='number').columns
 
     for col in numeric_cols:
+        print(f"\nProcessing column: {col}")
         df_capped = cap_outliers(df_capped, col)
     
+    print("\n=== Outlier Capping Process Completed ===")
     return df_capped
 
 # Optional: plot before vs after for any numeric column
@@ -511,7 +678,6 @@ def plot_outlier_distributions(original, capped, column):
     
     plt.tight_layout()
     plt.show()
-
 
 def plot_outliers_boxplot(df, title="Outlier Boxplot", figsize=(15, 6)):
     """
@@ -536,7 +702,6 @@ def plot_outliers_boxplot(df, title="Outlier Boxplot", figsize=(15, 6)):
     plt.tight_layout()
     plt.show()
 
-
 def winsorize_dataframe(df, numeric_cols=None, limits=[0.01, 0.99]):
     """
     Applies Winsorization to numeric columns in a DataFrame.
@@ -560,3 +725,5 @@ def winsorize_dataframe(df, numeric_cols=None, limits=[0.01, 0.99]):
         df[col] = df[col].clip(lower=lower, upper=upper)
 
     return df
+
+
