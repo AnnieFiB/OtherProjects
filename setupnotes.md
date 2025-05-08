@@ -148,7 +148,7 @@ https://www.kaggle.com/discussions/getting-started/256014
 
 git status              
 git add DataEngineering/DataModelling
-git commit -m "deng struct uptd"
+git commit -m "Data modelling capstone project completed"
 git commit -m "modular ETL pipeline cmpltd (PostgreSQL)"
 git push                 
 git commit -m "sales performance analysis dash.pbix"
