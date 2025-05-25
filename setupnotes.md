@@ -5,6 +5,8 @@
 
 ```sh
 python -m venv myenv  # Create virtual environment
+python -m venv pyspark-env
+
 # Verify Creation:
 ls -la venv/bin
 ```
@@ -17,6 +19,7 @@ Activate the virtual environment:
 
 ```sh
 source myenv/bin/activate  # On macOS/Linux
+source pyspark-env/Scripts/activate
 ```
 
 
