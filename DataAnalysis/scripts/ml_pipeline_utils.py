@@ -8,6 +8,7 @@ import seaborn as sns
 import numpy as np
 import random
 
+from pandas.api.types import is_numeric_dtype
 from sklearn.model_selection import StratifiedKFold, cross_val_predict, GridSearchCV, train_test_split, RandomizedSearchCV
 from sklearn.metrics import recall_score, f1_score, classification_report, confusion_matrix, roc_auc_score
 from sklearn.linear_model import LogisticRegression
@@ -22,20 +23,54 @@ from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.metrics import confusion_matrix, roc_curve, RocCurveDisplay, auc
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler, MinMaxScaler,  OneHotEncoder, OrdinalEncoder, LabelEncoder
 from sklearn.feature_selection import mutual_info_classif
 from sklearn.pipeline import Pipeline
 from imblearn.over_sampling import SMOTE
 from scipy.stats import boxcox
 import joblib
 import shap
-
+from imblearn.pipeline import Pipeline as ImbPipeline
+from sklearn.compose import ColumnTransformer
     
 # Set global seeds
 np.random.seed(42)
 random.seed(42)
 
+# =========================================
+# Data Preprocessing Functions
+# =========================================
 
+def transform_skewed_columns(df, columns, method='cbrt'):
+    """
+    Apply skewness-reducing transformation to specified columns.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame
+    - columns (list): List of column names to transform
+    - method (str): 'cbrt' or 'log'
+
+    Returns:
+    - pd.DataFrame: Transformed DataFrame
+    """
+    df = df.copy()
+    
+    for col in columns:
+        if col not in df.columns:
+            print(f"⚠️ Column '{col}' not found. Skipping.")
+            continue
+
+        try:
+            if method == 'cbrt':
+                df[col] = np.cbrt(df[col]).round(1)
+            elif method == 'log':
+                df[col] = np.log1p(df[col]).round(1)
+            else:
+                print(f"⚠️ Method '{method}' not recognized. Use 'cbrt' or 'log'.")
+        except Exception as e:
+            print(f"⚠️ Could not transform column '{col}': {e}")
+
+    return df
 
 def encode_dataframe(df, target_column):
     df_encoded = df.copy()
@@ -43,113 +78,89 @@ def encode_dataframe(df, target_column):
         df_encoded[col] = LabelEncoder().fit_transform(df_encoded[col])
     return df_encoded
 
-def encode_categorical_features(
-    df,
-    binary_encode=True,
-    one_hot_encode=True,
-    label_encode_cols=None,
-    drop_original=True
-):
+def encode_columns(df, target_col=None):
     """
-    Encode categorical features:
-    - Binary encoding for binary categorical columns (0/1)
-    - One-hot encoding for multi-class columns
-    - Label encoding for user-specified columns
+    Automatically encode categorical features:
+    - One-hot encode multi-category columns
+    - Ordinal encode binary columns
+    - Encode target column if it's not numeric
 
     Parameters:
     - df (pd.DataFrame): Input DataFrame
-    - binary_encode (bool): Apply binary encoding to 2-class object columns
-    - one_hot_encode (bool): Apply one-hot encoding to multi-class object columns
-    - label_encode_cols (list): List of column names to label encode
-    - drop_original (bool): Whether to drop original categorical columns
+    - target_col (str): Optional target column to preserve as single int
 
     Returns:
-    - df_encoded (pd.DataFrame): Transformed DataFrame with encoded variables
+    - pd.DataFrame: Encoded DataFrame
     """
-   
-    df_encoded = df.copy()
-    cat_cols = [col for col in df_encoded.columns if df_encoded[col].dtype == 'object' or df_encoded[col].nunique() < 20]
-    label_encode_cols = label_encode_cols or []
+    df = df.copy()
+    
+    # Separate target column
+    if target_col and target_col in df.columns:
+        target_series = df[target_col].copy()
+        if not pd.api.types.is_numeric_dtype(target_series):
+            print(f"ℹ️ Encoding target column '{target_col}' to numeric.")
+            target_series = LabelEncoder().fit_transform(target_series.astype(str))
+        df.drop(columns=[target_col], inplace=True)
+    else:
+        target_series = None
 
-    for col in cat_cols:
-        unique_vals = df_encoded[col].dropna().unique()
+    # Auto-detect categorical columns (exclude target)
+    cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+    cat_cols += [
+    col for col in df.columns 
+    if df[col].nunique() > 2 and not is_numeric_dtype(df[col])
+    ]
+    cat_cols = list(set(cat_cols))
 
-        if col in label_encode_cols:
-            # Label encoding
-            le = LabelEncoder()
-            df_encoded[col + '_label'] = le.fit_transform(df_encoded[col].astype(str))
-        
-        elif binary_encode and len(unique_vals) == 2:
-            # Binary encoding
-            mapping = {val: i for i, val in enumerate(sorted(unique_vals))}
-            df_encoded[col + '_bin'] = df_encoded[col].map(mapping)
+    # Categorize them into binary or multi-class
+    binary_cols = [col for col in cat_cols if df[col].nunique() == 2]
+    multi_class_cols = [col for col in cat_cols if df[col].nunique() > 2]
 
-        elif one_hot_encode and len(unique_vals) > 2:
-            # One-hot encoding
-            dummies = pd.get_dummies(df_encoded[col], prefix=col, drop_first=True).astype(int)
-            df_encoded = pd.concat([df_encoded, dummies], axis=1)
+    # Ordinal encode binary cols
+    if binary_cols:
+        oe = OrdinalEncoder()
+        df[binary_cols] = oe.fit_transform(df[binary_cols])
 
-        if drop_original:
-            df_encoded.drop(columns=[col], inplace=True)
+    # One-hot encode multi-class cols
+    if multi_class_cols:
+        ohe = OneHotEncoder(sparse_output=False, drop='first')
+        encoded = ohe.fit_transform(df[multi_class_cols])
+        encoded_df = pd.DataFrame(encoded, columns=ohe.get_feature_names_out(multi_class_cols), index=df.index)
+        df.drop(columns=multi_class_cols, inplace=True)
+        df = pd.concat([df, encoded_df], axis=1)
 
-    return df_encoded
+    # Reattach target column if it existed
+    if target_col:
+        df[target_col] = target_series
 
-def apply_min_max_scaling(df, columns=None):
+    return df
+
+def apply_min_max_scaling(df, columns=None, target_col=None):
     """
-    Apply Min-Max scaling to specified numeric columns.
+    Apply Min-Max scaling to numeric columns, excluding the target column if specified.
 
     Parameters:
     - df (pd.DataFrame): Input DataFrame
-    - columns (list or None): List of columns to scale; if None, scales all numeric columns
+    - columns (list or None): Columns to scale; if None, scales all numeric columns except target
+    - target_col (str or None): Column name to exclude from scaling (typically the target variable)
 
     Returns:
-    - df_scaled (pd.DataFrame): DataFrame with scaled columns
+    - df_scaled (pd.DataFrame): DataFrame with scaled features
     """
-
     df_scaled = df.copy()
     scaler = MinMaxScaler()
 
     if columns is None:
         columns = df_scaled.select_dtypes(include=['float64', 'int64']).columns.tolist()
+        if target_col in columns:
+            columns.remove(target_col)
 
-    df_scaled[columns] = scaler.fit_transform(df_scaled[columns])
+    df_scaled[columns] = scaler.fit_transform(df_scaled[columns]).round(1)
     return df_scaled
 
-def transform_skewed_features(df, method='log', exclude_zeros=True, threshold=1.0):
-    """
-    Transform skewed numeric features using log or Box-Cox.
-
-    Parameters:
-    - df (pd.DataFrame): Input DataFrame
-    - method (str): 'log' or 'boxcox'
-    - exclude_zeros (bool): If True, skips zero/negative values in log transformation
-    - threshold (float): Skewness threshold to apply transformation
-
-    Returns:
-    - df_transformed (pd.DataFrame): DataFrame with transformed features
-    """
-    
-
-    df_transformed = df.copy()
-    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-
-    for col in numeric_cols:
-        skewness = df[col].skew()
-        if abs(skewness) > threshold:
-            try:
-                if method == 'log':
-                    if exclude_zeros and (df[col] <= 0).any():
-                        continue
-                    df_transformed[col] = np.log1p(df[col])
-                elif method == 'boxcox':
-                    if (df[col] <= 0).any():
-                        continue  # Box-Cox requires strictly positive values
-                    df_transformed[col], _ = boxcox(df[col])
-            except Exception as e:
-                print(f"Skipping {col}: {e}")
-
-    return df_transformed
-
+# =========================================
+# Feature Importance Functions
+# =========================================
 
 def compute_random_forest_importance(df, target_column='y', top_n=20, plot=True):
     if df[target_column].dtype == 'object':
@@ -253,6 +264,9 @@ def prepare_features(df, target_column='y', drop_columns=None):
 
     return X, y
 
+# =========================================
+# ML Pipeline Functions
+# =========================================
 def scale_and_split(df, target_column='y', test_size=0.2, random_state=42):
     '''
     Scales and splits features returned by prepare_features.
@@ -275,15 +289,13 @@ def scale_and_split(df, target_column='y', test_size=0.2, random_state=42):
     )
 
     pipeline = Pipeline([
-        ('scaler', StandardScaler())
+        ('scaler', MinMaxScaler()) # or StandardScaler() based on needs
     ])
 
-    X_train_scaled = pipeline.fit_transform(X_train)
+    X_train_scaled = pipeline.fit_transform(X_train).round(1)
     X_test_scaled = pipeline.transform(X_test)
 
     return X_train_scaled, X_test_scaled, y_train, y_test, pipeline
-
-
 
 def scale_train_test(X_train, X_test):
     """
@@ -322,7 +334,6 @@ def balance_classes_smote(X, y, random_state=42):
     X_res, y_res = smote.fit_resample(X, y)
     return X_res, y_res
 
-
 def train_and_evaluate_models(X, y, selected_models=None, cv_splits=10):
     """
     Train selected models using cross-validation and return performance metrics.
@@ -345,7 +356,7 @@ def train_and_evaluate_models(X, y, selected_models=None, cv_splits=10):
         "SVM": SVC(probability=True, class_weight="balanced"),
         "LightGBM": LGBMClassifier(class_weight="balanced"),
         "Gradient Boosting": GradientBoostingClassifier(),
-        "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric="logloss", scale_pos_weight=5),
+        "XGBoost": XGBClassifier(eval_metric="logloss", scale_pos_weight=5),
         "CatBoost": CatBoostClassifier(verbose=0, class_weights=[1, 5]),  # Adjust weight if needed,
         "Naive Bayes": GaussianNB(),
         "Decision Tree": DecisionTreeClassifier(),
@@ -381,7 +392,7 @@ def train_and_evaluate_models(X, y, selected_models=None, cv_splits=10):
 
     return results, trained_models
 
-def results_to_dataframe(results_dict):
+def results_to_dataframe1(results_dict):
     '''
     Convert evaluation metrics from model dictionary to a pandas DataFrame.
 
@@ -402,6 +413,39 @@ def results_to_dataframe(results_dict):
             'Precision (1)': clf_report['1']['precision'],
             'Recall (1)': clf_report['1']['recall'],
             'F1-score (1)': clf_report['1']['f1-score']
+        }
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+def results_to_dataframe(results_dict):
+    """
+    Convert evaluation metrics from model dictionary to a pandas DataFrame.
+    Handles both '1' and '1.0' (str/float) as positive class labels.
+    """
+    rows = []
+
+    for model_name, metrics in results_dict.items():
+        clf_report = metrics['classification_report']
+        # Normalize keys as strings for consistency
+        keys = list(clf_report.keys())
+        pos_class_key = None
+
+        # Find the positive class key among '1', 1, '1.0', 1.0
+        for k in ['1', 1, '1.0', 1.0]:
+            if str(k) in keys:
+                pos_class_key = str(k)
+                break
+        def safe_round(val):
+            return round(val, 2) if val is not None else None
+        
+        row = {
+            'Model': model_name,
+            'ROC AUC': safe_round(metrics.get('roc_auc', None)),
+            'Accuracy': safe_round(clf_report.get('accuracy', None)),
+            'Precision (1)': safe_round(clf_report.get(pos_class_key, {}).get('precision', None)),
+            'Recall (1)': safe_round(clf_report.get(pos_class_key, {}).get('recall', None)),
+            'F1-score (1)': safe_round(clf_report.get(pos_class_key, {}).get('f1-score', None))
         }
         rows.append(row)
 
@@ -544,7 +588,7 @@ def load_models_and_params():
 
     return models_and_params
 
-def tune_and_select_best_model(X_train, y_train, models_and_params, model_to_tune=None, save_path="best_model.pkl"):
+def tune_and_select_best_model(X_train, y_train, models_and_params, model_to_tune=None, save_path="best_model.joblib"):
     '''
     Tune a specified model using GridSearchCV and select the best estimator based on Recall.
     

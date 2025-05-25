@@ -1,11 +1,11 @@
 {
     "python.languageServer": "Pylance",
-    "python.defaultInterpreterPath": "myenv/bin/python",           // or "myenv\\Scripts\\python.exe"
+    "python.defaultInterpreterPath": "${workspaceFolder}/myenv/bin/python.exe",
     "python.envFile": "${workspaceFolder}/.env",
     "python.analysis.extraPaths": [
         "DataAnalysis/scripts"
     ],
-    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "jupyter.notebookFileRoot": "${fileDirname}",
     "jupyter.logging.level": "error",
     "jupyter.askForKernelRestart": false,
     "jupyter.disableZMQSupport": false,
@@ -14,10 +14,9 @@
         "unpkg",
         "npm"
     ],
-    "remote.containers.enabled": false,
-    "jupyter.interactiveWindow.codeLens.enable": true,
     "python.terminal.activateEnvironment": true,
     "python.terminal.activateEnvInCurrentTerminal": true,
-    "terminal.integrated.defaultProfile.windows": "Git Bash",
     "files.autoSave": "onFocusChange"
+,
+  "remote.containers.enabled": false
 }
