@@ -8,6 +8,15 @@
 # Python bytecode
 __pycache__/
 *.py[cod]
+*.pyo
+*.ipynb_checkpoints/
+*.egg-info/
+*.env
+*.venv
+.env/
+.venv/
+
+
 
 # VS Code and notebook-specific virtual files
 .virtual_documents/
@@ -15,25 +24,68 @@ __pycache__/
 .ipynb_checkpoints/
 
 # Virtual environments
-myenv/
 pyspark-env/
+myenv/
+.env/
+.venv/
+pip-wheel-metadata/
 
 # Jupyter runtime
 *.nbconvert.ipynb
 
-# Output or temp data
+# Ignore data files
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.json
+*.parquet
+*.orc
+*.avro
+*.feather
+*.h5
+*.hdf5
+*.sav
+*.dta
+
+# Cloud / Platform Cache
+outputs/
+results/
+.temp_kaggle
+.kaggle/
+.dvc/
+
+
+# IDE/OS/Editor Files
+.vscode/
+.idea/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+.DS_Store        # macOS
+Thumbs.db        # Windows
+desktop.ini      # Windows
+
+
+# Temporary / Intermediate Files
 *.log
 *.tmp
 *.bak
-outputs/
-results/
-*.csv
-*.xlsx
-.temp_kaggle
-*.html
+*.swp
+*.~*
+*.out
+*.pid
+*.old
+*.orig
 
-
-# OS and editor files
-.DS_Store
-Thumbs.db
-.idea/
+# Build / Distribution Files
+build/
+dist/
+*.egg
+*.whl
+*.tar.gz
+*.zip
+*.dll
+*.exe
+*.so
+*.dylib

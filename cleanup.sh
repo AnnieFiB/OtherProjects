@@ -7,50 +7,33 @@ echo "############################################"
 DIR_COUNT=0
 FILE_COUNT=0
 
-echo "[1/7] Cleaning cache directories..."
-find . -type d \( -name "__pycache__" -o -name ".ipynb_checkpoints" -o -name ".pytest_cache" \) -exec rm -rf {} + && echo "  ✔ Removed cache directories"
+echo "[1/6] Cleaning cache and checkpoint directories..."
+find . -type d \( \
+    -name "__pycache__" \
+    -o -name ".ipynb_checkpoints" \
+    -o -name ".pytest_cache" \
+    -o -name "*.egg-info" \
+    -o -name ".mypy_cache" \
+    -o -name ".dvc" \
+\) -exec rm -rf {} + && echo "  ✔ Removed cache-related directories"
 
-echo "[2/7] Removing Python cache files (.pyc, .pyo)..."
-FILE_COUNT=$(find . -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.pyd" \) -delete -print | wc -l)
-echo "  ✔ Removed $FILE_COUNT Python cache files"
+echo "[2/6] Removing Python cache files (.pyc, .pyo, .pyd)..."
+PY_CACHE_COUNT=$(find . -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.pyd" \) -delete -print | wc -l)
+echo "  ✔ Removed $PY_CACHE_COUNT Python bytecode files"
 
-echo "[3/7] Removing temporary files (.tmp,.temp, ~$*)..."
-TMP_COUNT=$(find . -type f \( -name "*.tmp" -o -name "*~" \) -delete -print | wc -l)
-echo "  ✔ Removed $TMP_COUNT temporary files"
+echo "[3/6] Removing temporary and backup files (.tmp, *~, .bak)..."
+TMP_COUNT=$(find . -type f \( -name "*.tmp" -o -name "*~" -o -name "*.bak" \) -delete -print | wc -l)
+echo "  ✔ Removed $TMP_COUNT temp/backup files"
 
-echo "[4/7] Clearing Jupyter checkpoints..."
-CHECKPOINT_COUNT=$(find . -type d -name ".ipynb_checkpoints" -exec rm -rf {} + -print | wc -l)
-echo "  ✔ Cleared $CHECKPOINT_COUNT Jupyter checkpoints"
+echo "[4/6] Removing data outputs and logs (.tsv, .log, .json, .xlsx)..."
+DATA_COUNT=$(find . -type f \( -name "*.tsv" -o -name "*.log" -o -name "*.xlsx" \) -delete -print | wc -l)
+echo "  ✔ Removed $DATA_COUNT raw data and log files (excluding .csv)"
 
-echo "[5/7] Removing .devcontainer folder..."
-if [ -d ".devcontainer" ]; then
-    rm -rf .devcontainer
-    echo "  ✔ Removed .devcontainer"
-else
-    echo "  ℹ️  No .devcontainer folder found"
-fi
+echo "[5/6] Removing ML model files (.pkl, .npy, .npz, .joblib, .h5)..."
+MODEL_COUNT=$(find . -type f \( -name "*.pkl" -o -name "*.joblib" -o -name "*.npy" -o -name "*.npz" -o -name "*.h5" -o -name "*.ckpt" \) -delete -print | wc -l)
+echo "  ✔ Removed $MODEL_COUNT model/data artifacts"
 
-echo "[6/7] Cleaning .code-workspace and VS Code remote settings..."
-if compgen -G "*.code-workspace" > /dev/null; then
-    for file in *.code-workspace; do
-        sed -i '/remoteAuthority/d' "$file" && echo "  ✔ Cleaned $file"
-    done
-else
-    echo "  ℹ️  No workspace files to clean"
-fi
-
-if [ -f ".vscode/settings.json" ]; then
-    if ! grep -q "remote.containers.enabled" .vscode/settings.json; then
-        sed -i '$s/}/,\n  "remote.containers.enabled": false\n}/' .vscode/settings.json
-        echo "  ✔ Added remote.containers.enabled=false to settings.json"
-    fi
-else
-    mkdir -p .vscode
-    echo '{ "remote.containers.enabled": false }' > .vscode/settings.json
-    echo "  ✔ Created settings.json to disable dev containers"
-fi
-
-echo "[7/7] Clearing pip cache..."
+echo "[6/6] Clearing pip cache..."
 if command -v pip &> /dev/null; then
     pip cache purge
     echo "  ✔ Pip cache cleared"
@@ -59,4 +42,4 @@ else
 fi
 
 echo
-echo "✅ Cleanup complete!"
+echo "✅ Cleanup complete! CSV files have been preserved."

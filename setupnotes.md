@@ -1,6 +1,9 @@
 
 # Setting Up a Python Virtual Environment
 
+## SQL Alchemy documentation
+https://docs.sqlalchemy.org/en/20/errors.html#sql-expression-language
+
 ## Creating and Activating a Virtual Environment
 
 ```sh
