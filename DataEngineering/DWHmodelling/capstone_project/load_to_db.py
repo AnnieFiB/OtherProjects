@@ -52,7 +52,6 @@ def check_and_create_db(target_dbname: str, url_env_var: str):
     except Exception as e:
         print(f"❌ Error while checking/creating DB '{target_dbname}': {e}")
 
-
 def upsert_from_df(conn, df, table_name, conflict_columns, update_columns=None, schema='public'):
     """
     Upserts a DataFrame into a PostgreSQL table with debug status output.
@@ -69,7 +68,7 @@ def upsert_from_df(conn, df, table_name, conflict_columns, update_columns=None, 
         print(f"⚠️ Skipping {schema}.{table_name}: DataFrame is empty or None.")
         return
 
-    print(f"Preparing to upsert {len(df)} rows into {schema}.{table_name}...")
+    print(f"\n Preparing to upsert {len(df)} rows into {schema}.{table_name}...")
 
     if update_columns is None:
         update_columns = [col for col in df.columns if col not in conflict_columns]
@@ -86,10 +85,7 @@ def upsert_from_df(conn, df, table_name, conflict_columns, update_columns=None, 
         f"ON CONFLICT ({conflict_cols}) DO UPDATE SET {update_stmt};"
     )
 
-    #print(f" SQL Statement:\n{insert_sql}")
-    #print(f" Conflict Columns: {conflict_columns}")
-    #print(f" Update Columns: {update_columns}")
-
+    # Ensure the connection is in autocommit mode
     try:
         with conn.cursor() as cur:
             execute_values(cur, insert_sql, values)
@@ -97,4 +93,22 @@ def upsert_from_df(conn, df, table_name, conflict_columns, update_columns=None, 
         print(f"✅ {len(df)} records upserted into {schema}.{table_name}")
     except Exception as e:
         print(f"❌ Failed to upsert into {schema}.{table_name}: {e}")
+        conn.rollback()
+
+
+def load_all_known_tables(conn,
+                          dim_customer, dim_product, dim_payment, dim_location, dim_date, fact_sales):
+    try:
+        print("🔄 Starting to load all known tables...")
+        upsert_from_df(conn, dim_customer, 'dim_customer', ['customer_sk'], schema='olap')
+        upsert_from_df(conn, dim_product, 'dim_product', ['product_sk'], schema='olap')
+        upsert_from_df(conn, dim_payment, 'dim_payment', ['payment_sk'], schema='olap')
+        upsert_from_df(conn, dim_location, 'dim_location', ['location_sk'], schema='olap')
+        upsert_from_df(conn, dim_date, 'dim_date', ['date_id'], schema='olap')
+        upsert_from_df(conn, fact_sales, 'fact_sales', ['order_sk'], schema='olap')
+
+        print("\n  All tables successfully uploaded.")
+
+    except Exception as e:
+        print("❌ Error during table uploads:", e)
         conn.rollback()
