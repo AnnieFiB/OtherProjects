@@ -18,4 +18,34 @@ modify it to do what you want. These instructions are called transformations (na
 
 --SCALA (spark-shell)
 clear terminal: print("\u001b[2J\u001b[H")
-spark.range() , spar.toDF(specify datatype)
+spark.range() , spark.toDF(specify datatype)
+
+
+https://github.com/databricks/Spark-The-Definitive-Guide/tree/master
+
+D:\Portfolio\my_projects\spark
+
+
+
+
+git clone https://github.com/databricks/Spark-The-Definitive-Guide
+cd original-repo
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
