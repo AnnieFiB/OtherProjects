@@ -24,12 +24,14 @@ Activate the virtual environment:
 source myenv/bin/activate  # On macOS/Linux
 source pyspark-env/Scripts/activate
 ```
+cd DataEngineering/API_WebScr/capstone_project
+python alibaba.py
 
 
 ## Installing Dependencies
 
 ```sh
-pip install -r requirements.txt
+pip install -r requirements.txt ; pip install -r sparkreq.txt 
 pip list  # Verify installed packages
 pip freeze > requirement1s.txt
 pip install requests python-dotenv
@@ -40,6 +42,7 @@ to Remove All Installed Packages (Reset Environment): pip freeze | xargs pip uni
 
 ```sh
 python -m ipykernel install --user --name=myenv --display-name "Python (myenv)"
+python -m ipykernel install --user --name=pyspark-env --display-name "mypyspark-env"
 ```
 
 ### Verify Kernel Installation
@@ -168,3 +171,22 @@ git commit -m "bank telemarketing ntbk updtd"
 git commit -m "modular ETL pipeline cmpltd (PostgreSQL)"
 git push                 
 git commit -m "dwh ETL pipeline cmpltd (server based and serverless designs)"
+
+
+'''# 1. Set HADOOP_HOME
+print("HADOOP_HOME:", os.environ.get("HADOOP_HOME"))
+os.environ["HADOOP_HOME"] = "C:\\hadoop-3.2.1"  # Confirm this path exists!
+
+# 2. Add bin directory to PATH
+hadoop_bin = os.path.join(os.environ["HADOOP_HOME"], "bin")
+os.environ["PATH"] = hadoop_bin + os.pathsep + os.environ["PATH"]
+
+# Check if winutils.exe exists
+winutils_path = os.path.join(hadoop_bin, "winutils.exe")
+print(f"winutils.exe exists: {os.path.exists(winutils_path)}")
+
+# Check if hadoop.dll exists
+hadoop_dll = os.path.join(hadoop_bin, "hadoop.dll")
+print(f"hadoop.dll exists: {os.path.exists(hadoop_dll)}")
+
+print("PATH contains Hadoop bin:", r"C:\hadoop-3.2.1\bin" in os.environ["PATH"])'''

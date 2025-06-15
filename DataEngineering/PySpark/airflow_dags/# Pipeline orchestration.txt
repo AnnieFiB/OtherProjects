@@ -1,0 +1,165 @@
+pip uninstall -y numpy pandas
+pip install numpy==1.25.2 pandas==2.1.4
+
+pip uninstall psycopg2
+pip uninstall psycopg2-binary
+pip install psycopg2-binary
+
+pip uninstall cryptography -y
+pip uninstall azure-storage-blob -y
+
+
+def write_to_postgres(df, table_name, mode="append"):
+    try:
+        print(f"Writing table: {target_schema}.{table_name} ({df.count()} rows)...")
+        df.write \
+          .mode(mode) \
+          .jdbc(
+              url=jdbc_url,
+              table=f"{target_schema}.{table_name}",
+              properties=jdbc_props
+          )
+        print(f"✅ Successfully wrote: {target_schema}.{table_name}")
+        
+    except Exception as e:
+        print(f"❌ Failed to write table: {target_schema}.{table_name}")
+        print(f"Error: {str(e)}")
+
+##### Connect to db
+try:
+    # Load DB URL and target schema name
+    db_url = os.getenv("NUGA_BANK")
+    target_schema = "olap"
+
+    # Initialize SQLAlchemy engine and psycopg2 connection
+    engine = create_engine(db_url)
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    cursor = conn.cursor()
+
+    # Define metadata with schema
+    metadata = MetaData(schema=target_schema)
+
+    print("✅ Database engine created successfully.")
+
+    # Create schema if it does not exist
+    cursor.execute(
+        sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(target_schema))
+    )
+
+    print(f"✅ Schema '{target_schema}' created or already exists.")
+
+except Exception as e:
+    print("❌ Failed to create database engine or schema:", e)
+    engine = engine
+
+
+
+# 2. Define JDBC Settings
+parsed = urlparse(db_url);\
+jdbc_url = f"jdbc:postgresql://{parsed.hostname}:{parsed.port}{parsed.path}";\
+jdbc_props = {"user": parsed.username, "password": parsed.password, "driver": "org.postgresql.Driver"}
+
+
+
+
+
+
+#####   Create Tables with Primary/Foreign Keys/ ORM
+
+# --- Base Setup ---
+metadata = MetaData(schema=target_schema)
+Base = declarative_base(metadata=metadata)
+
+# --- Tables ---
+
+# === Customers Table ===
+class Customer(Base):
+    __tablename__ = 'customers'
+
+    customer_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    customer_name = Column(Text, nullable=False)
+    customer_address = Column(Text, nullable=False)
+    customer_city = Column(Text, nullable=False)
+    customer_state = Column(Text, nullable=False)
+    customer_country = Column(Text, nullable=False)
+
+    # Reverse relationship
+    transactions = relationship("TransactionFact", back_populates="customer", cascade="all, delete")
+
+
+# === Employees Table ===
+class Employee(Base):
+    __tablename__ = 'employees'
+
+    employee_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    company = Column(Text, nullable=False)
+    job_title = Column(Text, nullable=False)
+    email = Column(Text, nullable=False)
+    phone_number = Column(Text, nullable=False)
+    gender = Column(Text, nullable=False)
+    marital_status = Column(Text, nullable=False)
+
+    # Reverse relationship
+    transactions = relationship("TransactionFact", back_populates="employee", cascade="all, delete")
+
+
+# === Transactions Table ===
+class Transaction(Base):
+    __tablename__ = 'transactions'
+
+    transaction_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    transaction_date = Column(DateTime, nullable=True)
+    transaction_type = Column(String(50), nullable=True)
+    description = Column(Text, nullable=False)
+
+    # Reverse relationship
+    facts = relationship("TransactionFact", back_populates="transaction", cascade="all, delete")
+
+
+# === Transaction Fact Table ===
+class TransactionFact(Base):
+    __tablename__ = 'transaction_facts'
+
+    fact_transaction_sk = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    transaction_id = Column(
+        BigInteger,
+        ForeignKey(f'{target_schema}.transactions.transaction_id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    customer_id = Column(
+        BigInteger,
+        ForeignKey(f'{target_schema}.customers.customer_id', ondelete='CASCADE'),
+        nullable=False
+    )
+    employee_id = Column(
+        BigInteger,
+        ForeignKey(f'{target_schema}.employees.employee_id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    amount = Column(Float, nullable=True)
+    credit_card_number = Column(BigInteger, nullable=False)
+    iban = Column(Text, nullable=False)
+    currency_code = Column(String(10), nullable=False)
+    random_number = Column(Float, nullable=False)
+    category = Column(String(50), nullable=False)
+    group = Column(String(50), nullable=False)
+    is_active = Column(String(10), nullable=False)
+    last_updated = Column(DateTime, nullable=True)
+
+    # Relationships (for ORM joins)
+    customer = relationship("Customer", back_populates="transactions")
+    employee = relationship("Employee", back_populates="transactions")
+    transaction = relationship("Transaction", back_populates="facts")
+
+Base.metadata.create_all(engine)
+
+
+
+
+
+
+
+
