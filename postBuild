@@ -1,5 +1,0 @@
-#!/bin/bash
-echo ">> Setting env vars from .env (if exists)..."
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
-fi
