@@ -89,3 +89,5 @@ dist/
 *.exe
 *.so
 *.dylib
+.DS_Store
+.DS_Store
